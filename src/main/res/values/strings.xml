@@ -2,5 +2,17 @@
 <resources>
 
     <string name="app_name">Track manager</string>
-
+    <string name="loading">Loading...</string>
+    <string name="no_data">No data</string>
+    <string name="error">Error loading data</string>
+    <string name="mileage">%.2f km</string>
+    <string name="status" formatted="false">Mileage: %.2f km\nEngine time: %s\nAverage speed: %.2f kmh\n</string>
+    <string name="short_status" formatted="false">Engine time: %s\nAverage speed: %.2f kmh\n</string>
+    <string name="m_format" formatted="false">%d min</string>
+    <string name="hm_format" formatted="false">%d h %02d min</string>
+    <string name="save">Save</string>
+    <string name="share">Share</string>
+    <string name="kmh">kmh</string>
+    <string name="saved">Saved</string>
+    <string name="day">Select day</string>
 </resources>
