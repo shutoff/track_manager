@@ -23,6 +23,10 @@ import android.widget.ListView;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
+import com.dropbox.sync.android.DbxAccount;
+import com.dropbox.sync.android.DbxAccountManager;
+import com.dropbox.sync.android.DbxFileSystem;
+
 import org.joda.time.LocalDateTime;
 
 import java.text.SimpleDateFormat;
@@ -30,6 +34,8 @@ import java.util.Date;
 import java.util.Vector;
 
 public class MainActivity extends ActionBarActivity {
+
+    static final int REQUEST_LINK_TO_DBX = 1000;
 
     SharedPreferences preferences;
 
@@ -50,6 +56,8 @@ public class MainActivity extends ActionBarActivity {
 
     int progress;
     boolean loaded;
+
+    DbxAccountManager mDbxAcctMgr;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -86,6 +94,12 @@ public class MainActivity extends ActionBarActivity {
         });
 
         changeDate(new Date());
+        startLink();
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
     }
 
     @Override
@@ -139,6 +153,7 @@ public class MainActivity extends ActionBarActivity {
         progressFirst.setVisibility(View.VISIBLE);
         progressBar.setVisibility(View.GONE);
         tvLoading.setVisibility(View.VISIBLE);
+        lvTracks.setVisibility(View.GONE);
         task_id++;
         cur_task = task_id + "";
         month = d.getMonth() + 1;
@@ -484,5 +499,32 @@ public class MainActivity extends ActionBarActivity {
         minutes -= hours * 60;
         String s = getString(R.string.hm_format);
         return String.format(s, hours, minutes);
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (requestCode == REQUEST_LINK_TO_DBX) {
+            linkDone();
+        }
+    }
+
+    void linkDone() {
+        try {
+            DbxAccount account = mDbxAcctMgr.getLinkedAccount();
+            DbxFileSystem fs = DbxFileSystem.forAccount(account);
+            fs.awaitFirstSync();
+        } catch (Exception ex) {
+            // ignore
+        }
+    }
+
+    void startLink() {
+        if (mDbxAcctMgr == null)
+            mDbxAcctMgr = DbxAccountManager.getInstance(getApplicationContext(), DropBox.APP_KEY, DropBox.APP_SECRET);
+        if (!mDbxAcctMgr.hasLinkedAccount()) {
+            mDbxAcctMgr.startLink((Activity) this, REQUEST_LINK_TO_DBX);
+            return;
+        }
+        linkDone();
     }
 }

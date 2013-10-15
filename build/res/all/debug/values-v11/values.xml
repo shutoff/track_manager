@@ -26,15 +26,12 @@
         <item name="selectableItemBackground">?android:attr/selectableItemBackground</item>
     </style>
 
-    <style name="Widget.AppCompat.Base.AutoCompleteTextView"
-        parent="android:Widget.Holo.AutoCompleteTextView" />
+    <style name="Widget.AppCompat.Base.AutoCompleteTextView" parent="android:Widget.Holo.AutoCompleteTextView" />
 
     <style name="Widget.AppCompat.Base.ProgressBar" parent="android:Widget.Holo.ProgressBar" />
 
-    <style name="Widget.AppCompat.Base.ProgressBar.Horizontal"
-        parent="android:Widget.Holo.ProgressBar.Horizontal" />
+    <style name="Widget.AppCompat.Base.ProgressBar.Horizontal" parent="android:Widget.Holo.ProgressBar.Horizontal" />
 
-    <style name="Widget.AppCompat.Light.Base.AutoCompleteTextView"
-        parent="android:Widget.Holo.Light.AutoCompleteTextView" />
+    <style name="Widget.AppCompat.Light.Base.AutoCompleteTextView" parent="android:Widget.Holo.Light.AutoCompleteTextView" />
 
 </resources>
