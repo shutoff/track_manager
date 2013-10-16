@@ -25,12 +25,15 @@ import android.widget.TextView;
 
 import com.dropbox.sync.android.DbxAccount;
 import com.dropbox.sync.android.DbxAccountManager;
+import com.dropbox.sync.android.DbxFileInfo;
 import com.dropbox.sync.android.DbxFileSystem;
+import com.dropbox.sync.android.DbxPath;
 
 import org.joda.time.LocalDateTime;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.List;
 import java.util.Vector;
 
 public class MainActivity extends ActionBarActivity {
@@ -513,6 +516,12 @@ public class MainActivity extends ActionBarActivity {
             DbxAccount account = mDbxAcctMgr.getLinkedAccount();
             DbxFileSystem fs = DbxFileSystem.forAccount(account);
             fs.awaitFirstSync();
+            DbxPath parent = new DbxPath("/");
+            List<DbxFileInfo> list = fs.listFolder(parent);
+            for (DbxFileInfo fi : list) {
+                if (!fi.isFolder)
+                    continue;
+            }
         } catch (Exception ex) {
             // ignore
         }
