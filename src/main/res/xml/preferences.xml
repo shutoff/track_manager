@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    android:key="root">
+
+    <ListPreference
+        android:key="map_type"
+        android:title="@string/map_type"
+        android:entries="@array/map_types"
+        android:entryValues="@array/map_types"
+        android:defaultValue="Google" />
+
+    <CheckBoxPreference
+        android:title="@string/traffic"
+        android:summary="@string/traffic_summary"
+        android:key="traffic"
+        android:defaultValue="true" />
+
+    <Preference
+        android:title="@string/about"
+        android:summary="@string/version"
+        android:key="about" />
+
+</PreferenceScreen>

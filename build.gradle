@@ -23,21 +23,8 @@ android {
 
 }
 
-task nativeLibsToJar(type: Zip) {
-    destinationDir file("$buildDir/native-libs")
-    baseName 'native-libs'
-    extension 'jar'
-    from fileTree(dir: 'libs', include: '**/*.so')
-    into 'lib/'
-}
-
-tasks.withType(Compile) {
-    compileTask -> compileTask.dependsOn(nativeLibsToJar)
-}
-
 dependencies {
     compile 'com.android.support:support-v4:13.0.+'
     compile 'com.android.support:appcompat-v7:18.0.+'
     compile fileTree(dir: 'libs', include: '*.jar')
-    compile files("$buildDir/native-libs/native-libs.jar")
 }

@@ -7,4 +7,8 @@
         android:title="@string/day"
         android:icon="@android:drawable/ic_menu_day"
         car:showAsAction="ifRoom" />
+    <item
+        android:id="@+id/preferences"
+        android:title="@string/preferences"
+        car:showAsAction="never" />
 </menu>

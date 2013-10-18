@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="app_name">Менеджер треков</string>
+    <string name="loading">Загрузка...</string>
+    <string name="no_data">Нет данных</string>
+    <string name="error">Ошибка загрузки данных</string>
+    <string name="mileage">%.2f км</string>
+    <string name="status" formatted="false">Расстояние: %.2f km\nВремя в пути: %s\nСредняя скорость: %.2f км/ч\n</string>
+    <string name="short_status" formatted="false">Время в пути: %s\nСредняя скорость: %.2f км/ч\n</string>
+    <string name="m_format" formatted="false">%d мин</string>
+    <string name="hm_format" formatted="false">%d ч %02d мин</string>
+    <string name="save">Сохранить</string>
+    <string name="share">Поделиться</string>
+    <string name="kmh">км/ч</string>
+    <string name="saved">Сохранено</string>
+    <string name="day">Выберите день</string>
+    <string name="preferences">Настройки</string>
+    <string name="map_type">Использовать карты</string>
+    <array name="map_types">
+        <item>Google</item>
+        <item>OSM</item>
+    </array>
+    <string name="traffic">Показывать скорость</string>
+    <string name="traffic_summary">Показывать скорость как цветной трек</string>
+    <string name="about">О программе</string>
+    <string name="version">Версия:</string>
+</resources>

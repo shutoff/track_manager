@@ -7,6 +7,7 @@ import android.content.SharedPreferences;
 import android.graphics.Typeface;
 import android.os.AsyncTask;
 import android.os.Bundle;
+import android.os.Environment;
 import android.preference.PreferenceManager;
 import android.support.v7.app.ActionBarActivity;
 import android.text.Html;
@@ -23,22 +24,17 @@ import android.widget.ListView;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
-import com.dropbox.sync.android.DbxAccount;
-import com.dropbox.sync.android.DbxAccountManager;
-import com.dropbox.sync.android.DbxFileInfo;
-import com.dropbox.sync.android.DbxFileSystem;
-import com.dropbox.sync.android.DbxPath;
-
 import org.joda.time.LocalDateTime;
 
+import java.io.File;
+import java.io.FilenameFilter;
 import java.text.SimpleDateFormat;
 import java.util.Date;
-import java.util.List;
 import java.util.Vector;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class MainActivity extends ActionBarActivity {
-
-    static final int REQUEST_LINK_TO_DBX = 1000;
 
     SharedPreferences preferences;
 
@@ -59,8 +55,6 @@ public class MainActivity extends ActionBarActivity {
 
     int progress;
     boolean loaded;
-
-    DbxAccountManager mDbxAcctMgr;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -97,7 +91,7 @@ public class MainActivity extends ActionBarActivity {
         });
 
         changeDate(new Date());
-        startLink();
+        startSync();
     }
 
     @Override
@@ -146,10 +140,14 @@ public class MainActivity extends ActionBarActivity {
                 dialogCaldroidFragment.show(getSupportFragmentManager(), "TAG");
                 break;
             }
+            case R.id.preferences: {
+                Intent i = new Intent(this, Preferences.class);
+                startActivity(i);
+                break;
+            }
         }
         return false;
     }
-
 
     void changeDate(final Date d) {
         loaded = false;
@@ -504,36 +502,37 @@ public class MainActivity extends ActionBarActivity {
         return String.format(s, hours, minutes);
     }
 
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        if (requestCode == REQUEST_LINK_TO_DBX) {
-            linkDone();
-        }
-    }
-
-    void linkDone() {
-        try {
-            DbxAccount account = mDbxAcctMgr.getLinkedAccount();
-            DbxFileSystem fs = DbxFileSystem.forAccount(account);
-            fs.awaitFirstSync();
-            DbxPath parent = new DbxPath("/");
-            List<DbxFileInfo> list = fs.listFolder(parent);
-            for (DbxFileInfo fi : list) {
-                if (!fi.isFolder)
-                    continue;
+    void startSync() {
+        File file = Environment.getExternalStorageDirectory();
+        file = new File(file, Tracks.TRACK_FOLDER);
+        String[] tracks = file.list(new FilenameFilter() {
+            @Override
+            public boolean accept(File dir, String filename) {
+                return filename.matches("\\d{4}_\\d{2}_\\d{2}_gps.plt");
             }
-        } catch (Exception ex) {
-            // ignore
+        });
+        Pattern pattern = Pattern.compile("(\\d{4})_(\\d{2})_(\\d{2})_gps.plt");
+        for (String track : tracks) {
+            Matcher matcher = pattern.matcher(track);
+            if (!matcher.matches())
+                continue;
+            String year = matcher.group(1);
+            String month = matcher.group(2);
+            String day = matcher.group(3);
+            int y = Integer.parseInt(year);
+            int m = Integer.parseInt(month);
+            int d = Integer.parseInt(day);
+            Date track_date = new Date(y - 1900, m - 1, d);
+            Date now = new Date();
+            if (track_date.getTime() + 86400000 > now.getTime())
+                continue;
+            if (!getConnection())
+                return;
         }
     }
 
-    void startLink() {
-        if (mDbxAcctMgr == null)
-            mDbxAcctMgr = DbxAccountManager.getInstance(getApplicationContext(), DropBox.APP_KEY, DropBox.APP_SECRET);
-        if (!mDbxAcctMgr.hasLinkedAccount()) {
-            mDbxAcctMgr.startLink((Activity) this, REQUEST_LINK_TO_DBX);
-            return;
-        }
-        linkDone();
+    boolean getConnection() {
+        return false;
     }
+
 }

@@ -133,7 +133,7 @@ public class TrackView extends WebViewActivity {
             writer.append(" xsi:schemaLocation=\"http://www.topografix.com/GPX/1/0 http://www.topografix.com/GPX/1/0/gpx.xsd\">\n");
             writer.append("<time>");
             Date now = new Date();
-            writer.append(format(now, "yyyy-MM-dd'T'HH:mm:ss'Z"));
+            writer.append(format(now, "yyyy-MM-dd") + "T" + format(now, "HH:mm:ss") + "Z");
             writer.append("</time>\n");
             writer.append("<trk>\n");
 
@@ -158,7 +158,7 @@ public class TrackView extends WebViewActivity {
                 }
                 writer.append("<trkpt lat=\"" + lat + "\" lon=\"" + lon + "\">\n");
                 Date t = new Date(time);
-                writer.append("<time>" + format(t, "yyyy-MM-dd'T'HH:mm:ss'Z") + "</time>\n");
+                writer.append("<time>" + format(t, "yyyy-MM-dd") + "T" + format(t, "HH:mm:ss") + "Z</time>\n");
                 writer.append("</trkpt>\n");
             }
             if (trk)

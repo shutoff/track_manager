@@ -10,6 +10,8 @@ import java.util.Vector;
 
 public class Tracks {
 
+    static final String TRACK_FOLDER = "CityGuide/Tracks";
+
     static class Point {
         double lat;
         double lng;
@@ -33,7 +35,7 @@ public class Tracks {
     static Vector<Track> load(int d, int m, int y) {
         try {
             File file = Environment.getExternalStorageDirectory();
-            file = new File(file, "CityGuide/Tracks");
+            file = new File(file, TRACK_FOLDER);
             file = new File(file, String.format("%04d_%02d_%02d_gps.plt", y, m, d));
             BufferedReader reader = new BufferedReader(new FileReader(file));
             String line = reader.readLine();
@@ -137,6 +139,13 @@ public class Tracks {
                     start = i;
                 }
             }
+            for (Track track : res) {
+                Kalman1D filter = new Kalman1D(2, 30, 1, 1);
+                filter.setState(track.points.get(0).speed, 0.1);
+                for (Point p : track.points) {
+                    p.speed = filter.correct(p.speed);
+                }
+            }
             return res;
         } catch (Exception ex) {
             ex.printStackTrace();
@@ -171,6 +180,42 @@ public class Tracks {
         double fR = (fRho * fNu) / ((fRho * Math.pow(Math.sin(fAlpha), 2)) + (fNu * Math.pow(Math.cos(fAlpha), 2)));
 
         return fz * fR;
+    }
+
+    static class Kalman1D {
+
+        double Q;
+        double R;
+        double F;
+        double H;
+
+        double State;
+        double Covariance;
+
+        Kalman1D(double q, double r, double f, double h) {
+            Q = q;
+            R = r;
+            F = f;
+            H = h;
+        }
+
+        public void setState(double state, double covariance) {
+            State = state;
+            Covariance = covariance;
+        }
+
+        public double correct(double data) {
+            //time update - prediction
+            double X0 = F * State;
+            double P0 = F * Covariance * F + Q;
+
+            //measurement update - correction
+            double K = H * P0 / (H * P0 * H + R);
+            State = X0 + K * (data - H * X0);
+            Covariance = (1 - K * H) * P0;
+
+            return State;
+        }
     }
 
 }

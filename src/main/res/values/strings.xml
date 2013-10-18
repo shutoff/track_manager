@@ -15,4 +15,14 @@
     <string name="kmh">kmh</string>
     <string name="saved">Saved</string>
     <string name="day">Select day</string>
+    <string name="preferences">Preferences</string>
+    <string name="map_type">Map type</string>
+    <array name="map_types">
+        <item>Google</item>
+        <item>OSM</item>
+    </array>
+    <string name="traffic">Show speed</string>
+    <string name="traffic_summary">Show speed as color track</string>
+    <string name="about">About</string>
+    <string name="version">Version:</string>
 </resources>
