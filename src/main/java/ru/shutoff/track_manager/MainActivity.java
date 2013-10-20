@@ -7,16 +7,14 @@ import android.content.SharedPreferences;
 import android.graphics.Typeface;
 import android.os.AsyncTask;
 import android.os.Bundle;
-import android.os.Environment;
 import android.preference.PreferenceManager;
 import android.support.v7.app.ActionBarActivity;
-import android.text.Html;
-import android.text.SpannedString;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.View;
+import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.widget.AdapterView;
 import android.widget.BaseAdapter;
@@ -26,13 +24,15 @@ import android.widget.TextView;
 
 import org.joda.time.LocalDateTime;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
-import java.io.FilenameFilter;
+import java.io.FileOutputStream;
+import java.io.ObjectOutput;
+import java.io.ObjectOutputStream;
+import java.lang.reflect.Field;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Vector;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public class MainActivity extends ActionBarActivity {
 
@@ -59,6 +59,16 @@ public class MainActivity extends ActionBarActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        try {
+            ViewConfiguration config = ViewConfiguration.get(this);
+            Field menuKeyField = ViewConfiguration.class.getDeclaredField("sHasPermanentMenuKey");
+            if (menuKeyField != null) {
+                menuKeyField.setAccessible(true);
+                menuKeyField.setBoolean(config, false);
+            }
+        } catch (Exception ex) {
+            // Ignore
+        }
 
         preferences = PreferenceManager.getDefaultSharedPreferences(this);
         setContentView(R.layout.tracks);
@@ -90,8 +100,20 @@ public class MainActivity extends ActionBarActivity {
             }
         });
 
-        changeDate(new Date());
-        startSync();
+        try {
+            File file = new File(getIntent().getData().getPath());
+            tracks = Tracks.loadPlt(file);
+            if (tracks == null)
+                tracks = Tracks.loadGpx(file);
+        } catch (Exception ex) {
+            // ignore
+        }
+
+        if (tracks != null) {
+            tracksDone();
+        } else {
+            changeDate(new Date());
+        }
     }
 
     @Override
@@ -154,6 +176,7 @@ public class MainActivity extends ActionBarActivity {
         progressFirst.setVisibility(View.VISIBLE);
         progressBar.setVisibility(View.GONE);
         tvLoading.setVisibility(View.VISIBLE);
+        tvStatus.setVisibility(View.GONE);
         lvTracks.setVisibility(View.GONE);
         task_id++;
         cur_task = task_id + "";
@@ -402,89 +425,56 @@ public class MainActivity extends ActionBarActivity {
     void showTrack(int index) {
         Intent intent = new Intent(this, TrackView.class);
         Tracks.Track track = tracks.get(index);
-
-        Tracks.Point p = track.points.get(0);
-        StringBuilder track_data = new StringBuilder();
-        track_data.append(p.lat);
-        track_data.append(",");
-        track_data.append(p.lng);
-        track_data.append(",");
-        track_data.append(infoMark(p.time, track.start));
-        Date begin = new Date(p.time);
-        for (Tracks.Point point : track.points) {
-            track_data.append("|");
-            track_data.append(point.lat);
-            track_data.append(",");
-            track_data.append(point.lng);
-            track_data.append(",");
-            track_data.append((int) point.speed);
-            track_data.append(",");
-            track_data.append(point.time);
-        }
-        p = track.points.get(track.points.size() - 1);
-        track_data.append("|");
-        track_data.append(p.lat);
-        track_data.append(",");
-        track_data.append(p.lng);
-        track_data.append(",");
-        track_data.append(infoMark(p.time, track.finish));
-        Date end = new Date(p.time);
-        intent.putExtra(Names.TRACK, track_data.toString());
-        intent.putExtra(Names.STATUS, String.format(getString(R.string.status),
-                track.mileage / 1000,
-                timeFormat((int) (track.getTime() / 60)),
-                track.mileage * 3.6 / track.getTime()));
+        Vector<Tracks.Track> track_one = new Vector<Tracks.Track>();
+        track_one.add(track);
+        setTrack(track_one, intent);
+        Date begin = new Date(track.points.get(0).time);
+        Date end = new Date(track.points.get(track.points.size() - 1).time);
         intent.putExtra(Names.TITLE, format(begin, "d MMMM HH:mm") + "-" + format(end, "HH:mm"));
         startActivity(intent);
     }
 
     void showDay() {
         Intent intent = new Intent(this, TrackView.class);
-        StringBuilder track_data = new StringBuilder();
-
-        for (Tracks.Track track : tracks) {
-            Tracks.Point p = track.points.get(0);
-            if (track_data.length() > 0)
-                track_data.append("|");
-            track_data.append(p.lat);
-            track_data.append(",");
-            track_data.append(p.lng);
-            track_data.append(",");
-            track_data.append(infoMark(p.time, track.start));
-            for (Tracks.Point point : track.points) {
-                track_data.append("|");
-                track_data.append(point.lat);
-                track_data.append(",");
-                track_data.append(point.lng);
-                track_data.append(",");
-                track_data.append((int) point.speed);
-                track_data.append(",");
-                track_data.append(point.time);
-            }
-            p = track.points.get(track.points.size() - 1);
-            track_data.append("|");
-            track_data.append(p.lat);
-            track_data.append(",");
-            track_data.append(p.lng);
-            track_data.append(",");
-            track_data.append(infoMark(p.time, track.finish));
-        }
-
-        intent.putExtra(Names.TRACK, track_data.toString());
+        if (!setTrack(tracks, intent))
+            finish();
         intent.putExtra(Names.TITLE, getTitle());
         startActivity(intent);
     }
 
-    String format(Date d, String format) {
-        return new SimpleDateFormat(format).format(d);
+    boolean setTrack(Vector<Tracks.Track> tracks, Intent intent) {
+        byte[] data = null;
+        try {
+            ByteArrayOutputStream bos = new ByteArrayOutputStream();
+            ObjectOutput out = new ObjectOutputStream(bos);
+            out.writeObject(tracks);
+            data = bos.toByteArray();
+            out.close();
+            bos.close();
+        } catch (Exception ex) {
+            // ignore
+        }
+        if (data.length > 500000) {
+            try {
+                File outputDir = getCacheDir();
+                File file = File.createTempFile("track", "dat", outputDir);
+                FileOutputStream f = new FileOutputStream(file);
+                f.write(data);
+                intent.putExtra(Names.TRACK_FILE, file.getAbsolutePath());
+                f.close();
+            } catch (Exception ex) {
+                ex.printStackTrace();
+                return false;
+            }
+        } else {
+            intent.putExtra(Names.TRACK, data);
+        }
+        return true;
     }
 
-    static String infoMark(long t, String address) {
-        Date d = new Date(t);
-        String time = String.format("%02d:%02d", d.getHours(), d.getMinutes());
-        return "<b>" + time + "</b><br/>" + Html.toHtml(new SpannedString(address))
-                .replaceAll(",", "&#x2C;")
-                .replaceAll("\\|", "&#x7C;");
+
+    String format(Date d, String format) {
+        return new SimpleDateFormat(format).format(d);
     }
 
     static String formatTime(Date d) {
@@ -500,39 +490,6 @@ public class MainActivity extends ActionBarActivity {
         minutes -= hours * 60;
         String s = getString(R.string.hm_format);
         return String.format(s, hours, minutes);
-    }
-
-    void startSync() {
-        File file = Environment.getExternalStorageDirectory();
-        file = new File(file, Tracks.TRACK_FOLDER);
-        String[] tracks = file.list(new FilenameFilter() {
-            @Override
-            public boolean accept(File dir, String filename) {
-                return filename.matches("\\d{4}_\\d{2}_\\d{2}_gps.plt");
-            }
-        });
-        Pattern pattern = Pattern.compile("(\\d{4})_(\\d{2})_(\\d{2})_gps.plt");
-        for (String track : tracks) {
-            Matcher matcher = pattern.matcher(track);
-            if (!matcher.matches())
-                continue;
-            String year = matcher.group(1);
-            String month = matcher.group(2);
-            String day = matcher.group(3);
-            int y = Integer.parseInt(year);
-            int m = Integer.parseInt(month);
-            int d = Integer.parseInt(day);
-            Date track_date = new Date(y - 1900, m - 1, d);
-            Date now = new Date();
-            if (track_date.getTime() + 86400000 > now.getTime())
-                continue;
-            if (!getConnection())
-                return;
-        }
-    }
-
-    boolean getConnection() {
-        return false;
     }
 
 }

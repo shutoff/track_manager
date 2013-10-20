@@ -6,6 +6,8 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
 import android.preference.PreferenceManager;
+import android.text.Html;
+import android.text.SpannedString;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
@@ -13,22 +15,55 @@ import android.webkit.JavascriptInterface;
 import android.widget.Toast;
 
 import java.io.BufferedWriter;
+import java.io.ByteArrayInputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.ObjectInput;
+import java.io.ObjectInputStream;
 import java.io.OutputStreamWriter;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.Vector;
 
 public class TrackView extends WebViewActivity {
 
-    String track;
     SharedPreferences preferences;
+    Vector<Tracks.Track> tracks;
 
     class JsInterface {
 
         @JavascriptInterface
         public String getTrack() {
-            return track;
+            StringBuilder track_data = new StringBuilder();
+            for (Tracks.Track track : tracks) {
+                Tracks.Point p = track.points.get(0);
+                if (track_data.length() > 0)
+                    track_data.append("|");
+                track_data.append(p.lat);
+                track_data.append(",");
+                track_data.append(p.lng);
+                track_data.append(",");
+                track_data.append(infoMark(p.time, track.start));
+                for (Tracks.Point point : track.points) {
+                    track_data.append("|");
+                    track_data.append(point.lat);
+                    track_data.append(",");
+                    track_data.append(point.lng);
+                    track_data.append(",");
+                    track_data.append((int) point.speed);
+                    track_data.append(",");
+                    track_data.append(point.time);
+                }
+                p = track.points.get(track.points.size() - 1);
+                track_data.append("|");
+                track_data.append(p.lat);
+                track_data.append(",");
+                track_data.append(p.lng);
+                track_data.append(",");
+                track_data.append(infoMark(p.time, track.finish));
+            }
+            return track_data.toString();
         }
 
         @JavascriptInterface
@@ -54,6 +89,27 @@ public class TrackView extends WebViewActivity {
 
     @Override
     String loadURL() {
+        try {
+            byte[] track_data = null;
+            String file_name = getIntent().getStringExtra(Names.TRACK_FILE);
+            if (file_name != null) {
+                File file = new File(file_name);
+                FileInputStream in = new FileInputStream(file);
+                track_data = new byte[(int) file.length()];
+                in.read(track_data);
+                in.close();
+                file.delete();
+            } else {
+                track_data = getIntent().getByteArrayExtra(Names.TRACK);
+            }
+            ByteArrayInputStream bis = new ByteArrayInputStream(track_data);
+            ObjectInput in = new ObjectInputStream(bis);
+            tracks = (Vector<Tracks.Track>) in.readObject();
+            in.close();
+            bis.close();
+        } catch (Exception ex) {
+            finish();
+        }
         webView.addJavascriptInterface(new JsInterface(), "android");
         preferences = PreferenceManager.getDefaultSharedPreferences(this);
         if (preferences.getString("map_type", "").equals("OSM"))
@@ -63,7 +119,6 @@ public class TrackView extends WebViewActivity {
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
-        track = getIntent().getStringExtra(Names.TRACK);
         super.onCreate(savedInstanceState);
         setTitle(getIntent().getStringExtra(Names.TITLE));
     }
@@ -97,24 +152,20 @@ public class TrackView extends WebViewActivity {
             path = new File(path, "Tracks");
             path.mkdirs();
 
-            String[] points = track.split("\\|");
             long begin = 0;
             long end = 0;
-            for (String point : points) {
-                String[] data = point.split(",");
-                if (data.length != 4)
-                    continue;
-                double lat = Double.parseDouble(data[0]);
-                double lon = Double.parseDouble(data[1]);
-                long time = Long.parseLong(data[3]);
-                if ((lat < min_lat) || (lat > max_lat) || (lon < min_lon) || (lon > max_lon))
-                    continue;
-                if (begin == 0)
-                    begin = time;
-                end = time;
+            for (Tracks.Track track : tracks) {
+                for (Tracks.Point point : track.points) {
+                    if ((point.lat < min_lat) || (point.lat > max_lat) || (point.lng < min_lon) || (point.lng > max_lon))
+                        continue;
+                    if (begin == 0)
+                        begin = point.time;
+                    end = point.time;
+                }
             }
-            Date d2 = new Date(begin);
-            Date d1 = new Date(end);
+
+            Date d1 = new Date(begin);
+            Date d2 = new Date(end);
 
             String name = format(d1, "dd.MM.yy_HH.mm-") + format(d2, "HH.mm") + ".gpx";
             File out = new File(path, name);
@@ -138,31 +189,29 @@ public class TrackView extends WebViewActivity {
             writer.append("<trk>\n");
 
             boolean trk = false;
-            for (String point : points) {
-                String[] data = point.split(",");
-                if (data.length != 4)
-                    continue;
-                double lat = Double.parseDouble(data[0]);
-                double lon = Double.parseDouble(data[1]);
-                long time = Long.parseLong(data[3]);
-                if ((lat < min_lat) || (lat > max_lat) || (lon < min_lon) || (lon > max_lon)) {
-                    if (trk) {
-                        trk = false;
-                        writer.append("</trkseg>\n");
+            for (Tracks.Track track : tracks) {
+                for (Tracks.Point point : track.points) {
+                    if ((point.lat < min_lat) || (point.lat > max_lat) || (point.lng < min_lon) || (point.lng > max_lon)) {
+                        if (trk) {
+                            trk = false;
+                            writer.append("</trkseg>\n");
+                        }
+                        continue;
                     }
-                    continue;
+                    if (!trk) {
+                        trk = true;
+                        writer.append("<trkseg>\n");
+                    }
+                    writer.append("<trkpt lat=\"" + point.lat + "\" lon=\"" + point.lng + "\">\n");
+                    Date t = new Date(point.time);
+                    writer.append("<time>" + format(t, "yyyy-MM-dd") + "T" + format(t, "HH:mm:ss") + "Z</time>\n");
+                    writer.append("</trkpt>\n");
                 }
-                if (!trk) {
-                    trk = true;
-                    writer.append("<trkseg>\n");
+                if (trk) {
+                    trk = false;
+                    writer.append("</trkseg>");
                 }
-                writer.append("<trkpt lat=\"" + lat + "\" lon=\"" + lon + "\">\n");
-                Date t = new Date(time);
-                writer.append("<time>" + format(t, "yyyy-MM-dd") + "T" + format(t, "HH:mm:ss") + "Z</time>\n");
-                writer.append("</trkpt>\n");
             }
-            if (trk)
-                writer.append("</trkseg>");
             writer.append("</trk>\n");
             writer.append("</gpx>");
             writer.close();
@@ -191,5 +240,13 @@ public class TrackView extends WebViewActivity {
 
     String format(Date d, String format) {
         return new SimpleDateFormat(format).format(d);
+    }
+
+    static String infoMark(long t, String address) {
+        Date d = new Date(t);
+        String time = String.format("%02d:%02d", d.getHours(), d.getMinutes());
+        return "<b>" + time + "</b><br/>" + Html.toHtml(new SpannedString(address))
+                .replaceAll(",", "&#x2C;")
+                .replaceAll("\\|", "&#x7C;");
     }
 }

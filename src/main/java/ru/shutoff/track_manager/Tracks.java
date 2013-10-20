@@ -1,25 +1,31 @@
 package ru.shutoff.track_manager;
 
 import android.os.Environment;
+import android.util.Xml;
+
+import org.xmlpull.v1.XmlPullParser;
 
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
+import java.io.Serializable;
 import java.util.Date;
 import java.util.Vector;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class Tracks {
 
     static final String TRACK_FOLDER = "CityGuide/Tracks";
 
-    static class Point {
+    static class Point implements Serializable {
         double lat;
         double lng;
         double speed;
         long time;
     }
 
-    static class Track {
+    static class Track implements Serializable {
         Vector<Point> points;
         String start;
         String finish;
@@ -33,10 +39,103 @@ public class Tracks {
     }
 
     static Vector<Track> load(int d, int m, int y) {
+        File file = Environment.getExternalStorageDirectory();
+        file = new File(file, TRACK_FOLDER);
+        file = new File(file, String.format("%04d_%02d_%02d_gps.plt", y, m, d));
+        return loadPlt(file);
+    }
+
+    static Vector<Track> loadGpx(File file) {
         try {
-            File file = Environment.getExternalStorageDirectory();
-            file = new File(file, TRACK_FOLDER);
-            file = new File(file, String.format("%04d_%02d_%02d_gps.plt", y, m, d));
+            XmlPullParser xpp = Xml.newPullParser();
+            xpp.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, false);
+            xpp.setInput(new FileReader(file));
+            Vector<Track> tracks = new Vector<Track>();
+            Vector<Point> points = null;
+            Point point = null;
+            boolean is_time = false;
+            String time = "";
+            Pattern time_pattern = Pattern.compile("(\\d\\d\\d\\d)-(\\d\\d?)-(\\d\\d?)T(\\d\\d?):(\\d\\d):(\\d\\d)Z");
+            while (xpp.getEventType() != XmlPullParser.END_DOCUMENT) {
+                switch (xpp.getEventType()) {
+                    case XmlPullParser.START_TAG:
+                        if (xpp.getName().equals("trkpt")) {
+                            try {
+                                point = new Point();
+                                point.lat = Double.parseDouble(xpp.getAttributeValue(null, "lat"));
+                                point.lng = Double.parseDouble(xpp.getAttributeValue(null, "lon"));
+                            } catch (Exception ex) {
+                                // ignore
+                            }
+                        }
+                        if (xpp.getName().equals("time")) {
+                            is_time = true;
+                            time = "";
+                        }
+                        break;
+                    case XmlPullParser.TEXT:
+                        if (is_time)
+                            time += xpp.getText();
+                        break;
+                    case XmlPullParser.END_TAG:
+                        if (xpp.getName().equals("time")) {
+                            is_time = false;
+                            Matcher m = time_pattern.matcher(time);
+                            if (m.matches()) {
+                                int year = Integer.parseInt(m.group(1));
+                                int month = Integer.parseInt(m.group(2));
+                                int day = Integer.parseInt(m.group(3));
+                                int hour = Integer.parseInt(m.group(4));
+                                int min = Integer.parseInt(m.group(5));
+                                int sec = Integer.parseInt(m.group(6));
+                                Date dd = new Date(year - 1900, month - 1, day, hour, min, sec);
+                                if (point != null) {
+                                    point.time = dd.getTime();
+                                    if (points == null)
+                                        points = new Vector<Point>();
+                                    points.add(point);
+                                }
+                            }
+                            point = null;
+                        }
+                        if (xpp.getName().equals("trkseg") || xpp.getName().equals("trk")) {
+                            if (points != null) {
+                                if (points.size() > 4) {
+                                    Track track = new Track();
+                                    track.points = points;
+                                    track.mileage = 0;
+                                    Point p = null;
+                                    Kalman1D filter = new Kalman1D(2, 30, 1, 1);
+                                    filter.setState(track.points.get(0).speed, 0.1);
+                                    for (Point pp : points) {
+                                        if (p != null) {
+                                            double distance = calc_distance(p.lat, p.lng, pp.lat, pp.lng);
+                                            double speed = (distance * 3600) / (pp.time - p.time);
+                                            track.mileage += distance;
+                                            p.speed = filter.correct(speed);
+                                        }
+                                        p = pp;
+                                    }
+                                    tracks.add(track);
+                                }
+                                points = null;
+                            }
+                        }
+                        break;
+                }
+                xpp.next();
+            }
+            if (tracks.size() > 0)
+                return tracks;
+        } catch (Exception ex) {
+            // ignore
+            ex.printStackTrace();
+        }
+        return null;
+    }
+
+    static Vector<Track> loadPlt(File file) {
+        try {
             BufferedReader reader = new BufferedReader(new FileReader(file));
             String line = reader.readLine();
             if (!line.equals("OziExplorer Track Point File Version 2.1"))
@@ -115,12 +214,11 @@ public class Tracks {
                         Point p = points.get(start);
                         Track t = new Track();
                         t.points = new Vector<Point>();
-                        double distance = 0;
                         for (int n = start + 1; n < i; n++) {
                             Point c = points.get(n);
                             if (c.time < p.time)
                                 continue;
-                            distance = calc_distance(p.lat, p.lng, c.lat, c.lng);
+                            double distance = calc_distance(p.lat, p.lng, c.lat, c.lng);
                             double speed = (distance * 3600) / (c.time - p.time);
                             if (speed < 250) {
                                 t.points.add(p);
