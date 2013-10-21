@@ -39,8 +39,9 @@
                 <category android:name="android.intent.category.BROWSABLE" />
 
                 <data android:scheme="file" />
-                <data android:mimeType="application/gpx+xml" />
+                <data android:mimeType="*/*" />
                 <data android:pathPattern=".*\\.gpx" />
+                <data android:pathPattern=".*\\.plt" />
                 <data android:host="*" />
 
             </intent-filter>

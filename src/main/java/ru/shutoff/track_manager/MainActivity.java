@@ -7,6 +7,7 @@ import android.content.SharedPreferences;
 import android.graphics.Typeface;
 import android.os.AsyncTask;
 import android.os.Bundle;
+import android.os.Environment;
 import android.preference.PreferenceManager;
 import android.support.v7.app.ActionBarActivity;
 import android.view.LayoutInflater;
@@ -22,6 +23,7 @@ import android.widget.ListView;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
+import org.joda.time.DateTime;
 import org.joda.time.LocalDateTime;
 
 import java.io.ByteArrayOutputStream;
@@ -150,6 +152,13 @@ public class MainActivity extends ActionBarActivity {
                         setCaldroidListener(listener);
                     }
 
+                    @Override
+                    protected boolean isDateEnabled(DateTime date) {
+                        File file = Environment.getExternalStorageDirectory();
+                        file = new File(file, Tracks.TRACK_FOLDER);
+                        file = new File(file, String.format("%04d_%02d_%02d_gps.plt", date.getYear(), date.getMonthOfYear(), date.getDayOfMonth()));
+                        return file.exists();
+                    }
                 };
                 Bundle args = new Bundle();
                 args.putString(CaldroidFragment.DIALOG_TITLE, getString(R.string.day));

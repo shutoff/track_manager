@@ -25,12 +25,10 @@ public class CaldroidGridAdapter extends BaseAdapter {
     protected int month;
     protected int year;
     protected Context context;
-    protected ArrayList<DateTime> disableDates;
     protected ArrayList<DateTime> selectedDates;
 
     // Use internally, to make the search for date faster instead of using
     // indexOf methods on ArrayList
-    protected HashMap<DateTime, Integer> disableDatesMap = new HashMap<DateTime, Integer>();
     protected HashMap<DateTime, Integer> selectedDatesMap = new HashMap<DateTime, Integer>();
 
     protected DateTime minDateTime;
@@ -74,14 +72,6 @@ public class CaldroidGridAdapter extends BaseAdapter {
 
     public void setMaxDateTime(DateTime maxDateTime) {
         this.maxDateTime = maxDateTime;
-    }
-
-    public ArrayList<DateTime> getDisableDates() {
-        return disableDates;
-    }
-
-    public void setDisableDates(ArrayList<DateTime> disableDates) {
-        this.disableDates = disableDates;
     }
 
     public ArrayList<DateTime> getSelectedDates() {
@@ -140,15 +130,6 @@ public class CaldroidGridAdapter extends BaseAdapter {
      */
     @SuppressWarnings("unchecked")
     private void populateFromCaldroidData() {
-        disableDates = (ArrayList<DateTime>) caldroidData
-                .get(CaldroidFragment.DISABLE_DATES);
-        if (disableDates != null) {
-            disableDatesMap.clear();
-            for (DateTime dateTime : disableDates) {
-                disableDatesMap.put(dateTime, 1);
-            }
-        }
-
         selectedDates = (ArrayList<DateTime>) caldroidData
                 .get(CaldroidFragment.SELECTED_DATES);
         if (selectedDates != null) {
@@ -252,8 +233,7 @@ public class CaldroidGridAdapter extends BaseAdapter {
         // Customize for disabled dates and date outside min/max dates
         if ((minDateTime != null && dateTime.isBefore(minDateTime))
                 || (maxDateTime != null && dateTime.isAfter(maxDateTime))
-                || (disableDates != null && disableDatesMap
-                .containsKey(dateTime))) {
+                || !isDateEnabled(dateTime)) {
 
             cellView.setTextColor(CaldroidFragment.disabledTextColor);
             if (CaldroidFragment.disabledBackgroundDrawable == -1) {
@@ -298,6 +278,10 @@ public class CaldroidGridAdapter extends BaseAdapter {
         setCustomResources(dateTime, cellView);
 
         return cellView;
+    }
+
+    protected boolean isDateEnabled(DateTime date) {
+        return true;
     }
 
 }

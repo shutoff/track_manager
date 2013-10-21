@@ -95,7 +95,6 @@ public class CaldroidFragment extends DialogFragment {
     public final static String MONTH = "month";
     public final static String YEAR = "year";
     public final static String SHOW_NAVIGATION_ARROWS = "showNavigationArrows";
-    public final static String DISABLE_DATES = "disableDates";
     public final static String SELECTED_DATES = "selectedDates";
     public final static String MIN_DATE = "minDate";
     public final static String MAX_DATE = "maxDate";
@@ -117,7 +116,6 @@ public class CaldroidFragment extends DialogFragment {
     protected String dialogTitle;
     protected int month = -1;
     protected int year = -1;
-    protected ArrayList<DateTime> disableDates = new ArrayList<DateTime>();
     protected ArrayList<DateTime> selectedDates = new ArrayList<DateTime>();
     protected DateTime minDateTime;
     protected DateTime maxDateTime;
@@ -234,7 +232,6 @@ public class CaldroidFragment extends DialogFragment {
      */
     public HashMap<String, Object> getCaldroidData() {
         caldroidData.clear();
-        caldroidData.put(DISABLE_DATES, disableDates);
         caldroidData.put(SELECTED_DATES, selectedDates);
         caldroidData.put(_MIN_DATE_TIME, minDateTime);
         caldroidData.put(_MAX_DATE_TIME, maxDateTime);
@@ -348,11 +345,6 @@ public class CaldroidFragment extends DialogFragment {
         if (selectedDates != null && selectedDates.size() > 0) {
             bundle.putStringArrayList(SELECTED_DATES,
                     CalendarHelper.convertToStringList(selectedDates));
-        }
-
-        if (disableDates != null && disableDates.size() > 0) {
-            bundle.putStringArrayList(DISABLE_DATES,
-                    CalendarHelper.convertToStringList(disableDates));
         }
 
         if (minDateTime != null) {
@@ -510,65 +502,6 @@ public class CaldroidFragment extends DialogFragment {
      */
     public void nextMonth() {
         dateViewPager.setCurrentItem(pageChangeListener.getCurrentPage() + 1);
-    }
-
-    /**
-     * Clear all disable dates. Notice this does not refresh the calendar, need
-     * to explicitly call refreshView()
-     */
-    public void clearDisableDates() {
-        disableDates.clear();
-    }
-
-    /**
-     * Set disableDates from ArrayList of Date
-     *
-     * @param disableDateList
-     */
-    public void setDisableDates(ArrayList<Date> disableDateList) {
-        disableDates.clear();
-        if (disableDateList == null || disableDateList.size() == 0) {
-            return;
-        }
-
-        for (Date date : disableDateList) {
-            DateTime dateTime = CalendarHelper.convertDateToDateTime(date);
-            disableDates.add(dateTime);
-        }
-
-    }
-
-    /**
-     * Set disableDates from ArrayList of String. By default, the date formatter
-     * is yyyy-MM-dd. For e.g 2013-12-24
-     *
-     * @param disableDateStrings
-     */
-    public void setDisableDatesFromString(ArrayList<String> disableDateStrings) {
-        setDisableDatesFromString(disableDateStrings, null);
-    }
-
-    /**
-     * Set disableDates from ArrayList of String with custom date format. For
-     * example, if the date string is 06-Jan-2013, use date format dd-MMM-yyyy.
-     * This method will refresh the calendar, it's not necessary to call
-     * refreshView()
-     *
-     * @param disableDateStrings
-     * @param dateFormat
-     */
-    public void setDisableDatesFromString(ArrayList<String> disableDateStrings,
-                                          String dateFormat) {
-        disableDates.clear();
-        if (disableDateStrings == null) {
-            return;
-        }
-
-        for (String dateString : disableDateStrings) {
-            DateTime dateTime = CalendarHelper.getDateTimeFromString(
-                    dateString, dateFormat);
-            disableDates.add(dateTime);
-        }
     }
 
     /**
@@ -763,8 +696,7 @@ public class CaldroidFragment extends DialogFragment {
                     if ((minDateTime != null && dateTime.isBefore(minDateTime))
                             || (maxDateTime != null && dateTime
                             .isAfter(maxDateTime))
-                            || (disableDates != null && disableDates
-                            .indexOf(dateTime) != -1)) {
+                            || !isDateEnabled(dateTime)) {
                         return;
                     }
 
@@ -774,6 +706,10 @@ public class CaldroidFragment extends DialogFragment {
         };
 
         return dateItemClickListener;
+    }
+
+    protected boolean isDateEnabled(DateTime date) {
+        return true;
     }
 
     static String monthYear(int year, int month) {
@@ -847,16 +783,6 @@ public class CaldroidFragment extends DialogFragment {
 
             DateTimeFormatter formatter = DateTimeFormat
                     .forPattern("yyyy-MM-dd");
-
-            // Get disable dates
-            ArrayList<String> disableDateStrings = args
-                    .getStringArrayList(DISABLE_DATES);
-            if (disableDateStrings != null && disableDateStrings.size() > 0) {
-                for (String dateString : disableDateStrings) {
-                    DateTime dt = formatter.parseDateTime(dateString);
-                    disableDates.add(dt);
-                }
-            }
 
             // Get selected dates
             ArrayList<String> selectedDateStrings = args
