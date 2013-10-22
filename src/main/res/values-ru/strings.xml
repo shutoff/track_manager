@@ -25,4 +25,6 @@
     <string name="traffic_summary">Показывать скорость как цветной трек</string>
     <string name="about">О программе</string>
     <string name="version">Версия:</string>
+    <string name="delete">Удалить</string>
+    <string name="remove_warn">Этот трек содержит слишком мало точек с правильной позицией GPS\nУдалить его?</string>
 </resources>

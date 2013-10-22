@@ -140,7 +140,6 @@ public class CaldroidFragment extends DialogFragment {
      * textColorForDateMap holds color for text for each date
      */
     protected HashMap<DateTime, Integer> textColorForDateTimeMap = new HashMap<DateTime, Integer>();
-    ;
 
     /**
      * First column of calendar is Sunday
@@ -181,7 +180,12 @@ public class CaldroidFragment extends DialogFragment {
      */
     public CaldroidGridAdapter getNewDatesGridAdapter(int month, int year) {
         return new CaldroidGridAdapter(getActivity(), month, year,
-                getCaldroidData(), extraData);
+                getCaldroidData(), extraData) {
+            @Override
+            protected boolean isDateEnabled(DateTime date) {
+                return CaldroidFragment.this.isDateEnabled(date);
+            }
+        };
     }
 
     /**

@@ -25,4 +25,6 @@
     <string name="traffic_summary">Show speed as color track</string>
     <string name="about">About</string>
     <string name="version">Version:</string>
+    <string name="delete">Delete</string>
+    <string name="remove_warn">This track contains too few points with valid GPS position\nRemove it?</string>
 </resources>

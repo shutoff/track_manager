@@ -1,6 +1,5 @@
 package ru.shutoff.track_manager;
 
-import android.os.Environment;
 import android.util.Xml;
 
 import org.xmlpull.v1.XmlPullParser;
@@ -36,13 +35,6 @@ public class Tracks {
                 return 0;
             return (points.get(points.size() - 1).time - points.get(0).time) / 1000;
         }
-    }
-
-    static Vector<Track> load(int d, int m, int y) {
-        File file = Environment.getExternalStorageDirectory();
-        file = new File(file, TRACK_FOLDER);
-        file = new File(file, String.format("%04d_%02d_%02d_gps.plt", y, m, d));
-        return loadPlt(file);
     }
 
     static Vector<Track> loadGpx(File file) {
@@ -116,7 +108,8 @@ public class Tracks {
                                         }
                                         p = pp;
                                     }
-                                    tracks.add(track);
+                                    if (track.mileage > 5)
+                                        tracks.add(track);
                                 }
                                 points = null;
                             }
@@ -160,7 +153,7 @@ public class Tracks {
                 try {
                     double lat = Double.parseDouble(parts[0]);
                     double lng = Double.parseDouble(parts[1]);
-                    double alt = Double.parseDouble(parts[2]);
+                    double alt = Double.parseDouble(parts[3]);
                     String[] date = parts[5].split("-");
                     String[] times = parts[6].split("-");
                     int year = Integer.parseInt(date[0]);
@@ -231,7 +224,7 @@ public class Tracks {
                                 p = c;
                         }
                         t.points.add(p);
-                        if ((t.points.size() > 4) && (t.mileage > 100))
+                        if ((t.points.size() > 4) && (t.mileage > 5))
                             res.add(t);
                     }
                     start = i;
@@ -244,7 +237,8 @@ public class Tracks {
                     p.speed = filter.correct(p.speed);
                 }
             }
-            return res;
+            if (res.size() > 0)
+                return res;
         } catch (Exception ex) {
             ex.printStackTrace();
         }

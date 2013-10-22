@@ -19,6 +19,7 @@ import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.widget.AdapterView;
 import android.widget.BaseAdapter;
+import android.widget.Button;
 import android.widget.ListView;
 import android.widget.ProgressBar;
 import android.widget.TextView;
@@ -49,11 +50,15 @@ public class MainActivity extends ActionBarActivity {
     TextView tvLoading;
     TextView tvStatus;
     ListView lvTracks;
+    TextView tvRemove;
+    Button btnRemove;
+    Date current;
 
     int task_id;
     int month;
     int year;
     String cur_task;
+    File track_file;
 
     int progress;
     boolean loaded;
@@ -79,6 +84,8 @@ public class MainActivity extends ActionBarActivity {
         tvLoading = (TextView) findViewById(R.id.loading);
         tvStatus = (TextView) findViewById(R.id.status);
         lvTracks = (ListView) findViewById(R.id.tracks);
+        tvRemove = (TextView) findViewById(R.id.remove_warn);
+        btnRemove = (Button) findViewById(R.id.delete);
 
         lvTracks.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             @Override
@@ -111,11 +118,22 @@ public class MainActivity extends ActionBarActivity {
             // ignore
         }
 
+        current = new Date();
         if (tracks != null) {
             tracksDone();
         } else {
             changeDate(new Date());
         }
+
+        btnRemove.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                track_file.delete();
+                track_file = null;
+                tvRemove.setVisibility(View.GONE);
+                btnRemove.setVisibility(View.GONE);
+            }
+        });
     }
 
     @Override
@@ -168,6 +186,7 @@ public class MainActivity extends ActionBarActivity {
                 dialogCaldroidFragment.setArguments(args);
                 LocalDateTime now = new LocalDateTime();
                 dialogCaldroidFragment.setMaxDate(now.toDate());
+                dialogCaldroidFragment.setSelectedDates(current, current);
                 dialogCaldroidFragment.show(getSupportFragmentManager(), "TAG");
                 break;
             }
@@ -182,21 +201,35 @@ public class MainActivity extends ActionBarActivity {
 
     void changeDate(final Date d) {
         loaded = false;
+        current = d;
         progressFirst.setVisibility(View.VISIBLE);
         progressBar.setVisibility(View.GONE);
         tvLoading.setVisibility(View.VISIBLE);
         tvStatus.setVisibility(View.GONE);
         lvTracks.setVisibility(View.GONE);
+        tvRemove.setVisibility(View.GONE);
+        btnRemove.setVisibility(View.GONE);
         task_id++;
         cur_task = task_id + "";
         month = d.getMonth() + 1;
         year = d.getYear() + 1900;
+
+        track_file = Environment.getExternalStorageDirectory();
+        track_file = new File(track_file, Tracks.TRACK_FOLDER);
+        track_file = new File(track_file, String.format("%04d_%02d_%02d_gps.plt", year, month, d.getDate()));
+
         setTitle(format(d, "d MMMM yyyy"));
+        if (!track_file.exists()) {
+            track_file = null;
+            tracksDone();
+            return;
+        }
+
         AsyncTask<String, Void, String> task = new AsyncTask<String, Void, String>() {
             @Override
             protected String doInBackground(String... params) {
                 if (cur_task.equals(params[0]))
-                    tracks = Tracks.load(d.getDate(), month, year);
+                    tracks = Tracks.loadPlt(track_file);
                 return params[0];
             }
 
@@ -212,15 +245,14 @@ public class MainActivity extends ActionBarActivity {
     void tracksDone() {
         progressFirst.setVisibility(View.GONE);
         progressBar.setVisibility(View.VISIBLE);
-        if (tracks == null) {
+        if ((tracks == null) || (tracks.size() == 0)) {
             showError(getString(R.string.no_data));
+            if (track_file != null) {
+                tvRemove.setVisibility(View.VISIBLE);
+                btnRemove.setVisibility(View.VISIBLE);
+            }
             return;
         }
-        if (tracks.size() == 0) {
-            showError(getString(R.string.no_data));
-            return;
-        }
-
         double mileage = 0;
         long time = 0;
         for (Tracks.Track track : tracks) {
@@ -251,7 +283,6 @@ public class MainActivity extends ActionBarActivity {
         tvLoading.setVisibility(View.GONE);
         progressFirst.setVisibility(View.GONE);
         progressBar.setVisibility(View.GONE);
-
     }
 
     abstract class TrackPositionFetcher extends AddressRequest {

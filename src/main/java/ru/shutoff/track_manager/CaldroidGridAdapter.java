@@ -20,7 +20,7 @@ import java.util.HashMap;
  *
  * @author thomasdao
  */
-public class CaldroidGridAdapter extends BaseAdapter {
+abstract public class CaldroidGridAdapter extends BaseAdapter {
     protected ArrayList<DateTime> datetimeList;
     protected int month;
     protected int year;
@@ -280,8 +280,6 @@ public class CaldroidGridAdapter extends BaseAdapter {
         return cellView;
     }
 
-    protected boolean isDateEnabled(DateTime date) {
-        return true;
-    }
+    abstract protected boolean isDateEnabled(DateTime date);
 
 }
