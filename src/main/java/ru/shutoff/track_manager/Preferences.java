@@ -5,7 +5,6 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
-import android.preference.ListPreference;
 import android.preference.Preference;
 import android.preference.PreferenceActivity;
 import android.preference.PreferenceManager;
@@ -30,22 +29,22 @@ public class Preferences extends PreferenceActivity {
         }
         aboutPref.setOnPreferenceClickListener(new Preference.OnPreferenceClickListener() {
             public boolean onPreferenceClick(Preference preference) {
-                Intent intent = new Intent(getBaseContext(), About.class);
+                Intent intent = new Intent(getBaseContext(), WebViewActivity.class);
+                intent.putExtra(Names.URL, "file:///android_asset/html/about.html");
                 startActivity(intent);
                 return true;
             }
         });
 
-        final ListPreference mapPref = (ListPreference) findPreference("map_type");
-        mapPref.setOnPreferenceChangeListener(new Preference.OnPreferenceChangeListener() {
-            @Override
-            public boolean onPreferenceChange(Preference preference, Object newValue) {
-                mapPref.setSummary(newValue.toString());
+        Preference donatePref = (Preference) findPreference("donate");
+        donatePref.setOnPreferenceClickListener(new Preference.OnPreferenceClickListener() {
+            public boolean onPreferenceClick(Preference preference) {
+                Intent intent = new Intent(getBaseContext(), WebViewActivity.class);
+                intent.putExtra(Names.URL, "file:///android_asset/html/donate.html");
+                startActivity(intent);
                 return true;
             }
         });
-
-        mapPref.setSummary(preferences.getString("map_type", "Google"));
     }
 
 }

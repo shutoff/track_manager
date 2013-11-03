@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="vertical"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:gravity="center">
+
+    <LinearLayout
+        android:id="@+id/calendar"
+        android:orientation="vertical"
+        android:layout_height="match_parent"
+        android:layout_width="300dp" />
+
+    <ProgressBar
+        android:id="@+id/progress"
+        android:layout_height="40dp"
+        android:layout_width="40dp" />
+
+    <ListView
+        android:id="@+id/files"
+        android:layout_height="match_parent"
+        android:layout_width="match_parent" />
+
+</LinearLayout>

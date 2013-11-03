@@ -16,15 +16,13 @@
     <string name="saved">Saved</string>
     <string name="day">Select day</string>
     <string name="preferences">Preferences</string>
-    <string name="map_type">Map type</string>
-    <array name="map_types">
-        <item>Google</item>
-        <item>OSM</item>
-    </array>
     <string name="traffic">Show speed</string>
-    <string name="traffic_summary">Show speed as color track</string>
     <string name="about">About</string>
     <string name="version">Version:</string>
     <string name="delete">Delete</string>
     <string name="remove_warn">This track contains too few points with valid GPS position\nRemove it?</string>
+    <string name="files">Files</string>
+    <string name="google">Google</string>
+    <string name="osm">OSM</string>
+    <string name="beer">Beer for developer</string>
 </resources>

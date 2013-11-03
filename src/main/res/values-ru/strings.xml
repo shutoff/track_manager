@@ -16,15 +16,11 @@
     <string name="saved">Сохранено</string>
     <string name="day">Выберите день</string>
     <string name="preferences">Настройки</string>
-    <string name="map_type">Использовать карты</string>
-    <array name="map_types">
-        <item>Google</item>
-        <item>OSM</item>
-    </array>
     <string name="traffic">Показывать скорость</string>
-    <string name="traffic_summary">Показывать скорость как цветной трек</string>
     <string name="about">О программе</string>
     <string name="version">Версия:</string>
     <string name="delete">Удалить</string>
     <string name="remove_warn">Этот трек содержит слишком мало точек с правильной позицией GPS\nУдалить его?</string>
+    <string name="files">Файлы</string>
+    <string name="beer">Разработчику на пиво</string>
 </resources>

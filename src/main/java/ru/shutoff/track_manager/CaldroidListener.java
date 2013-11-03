@@ -2,6 +2,8 @@ package ru.shutoff.track_manager;
 
 import android.view.View;
 
+import org.joda.time.DateTime;
+
 import java.util.Date;
 
 /**
@@ -20,5 +22,8 @@ public abstract class CaldroidListener {
         // Do nothing
     }
 
-    ;
+    public boolean isDateEnabled(DateTime date) {
+        return true;
+    }
+
 }

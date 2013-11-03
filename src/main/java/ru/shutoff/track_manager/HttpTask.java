@@ -51,7 +51,7 @@ public abstract class HttpTask extends AsyncTask<String, Void, JSONObject> {
             background(result);
             return result;
         } catch (Exception ex) {
-            // ignore
+            ex.printStackTrace();
         }
         return null;
     }
@@ -63,7 +63,7 @@ public abstract class HttpTask extends AsyncTask<String, Void, JSONObject> {
                 result(res);
                 return;
             } catch (Exception ex) {
-                // ignore
+                ex.printStackTrace();
             }
         }
         error();

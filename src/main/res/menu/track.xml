@@ -12,4 +12,16 @@
         android:title="@string/share"
         android:icon="@android:drawable/ic_menu_share"
         car:showAsAction="ifRoom" />
+    <item
+        android:id="@+id/google"
+        android:title="@string/google"
+        car:showAsAction="never" />
+    <item
+        android:id="@+id/osm"
+        android:title="@string/osm"
+        car:showAsAction="never" />
+    <item
+        android:id="@+id/traffic"
+        android:title="@string/traffic"
+        car:showAsAction="never" />
 </menu>

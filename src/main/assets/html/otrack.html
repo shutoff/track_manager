@@ -1,19 +1,19 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title></title>
-    <meta charset="utf-8">
-    <meta name="viewport" content="initial-scale=1.0, user-scalable=no">
-    <link rel="stylesheet" href="http://cdn.leafletjs.com/leaflet-0.6.4/leaflet.css"/>
-    <script src="http://cdn.leafletjs.com/leaflet-0.6.4/leaflet.js"></script>
-    <style>
-        html, body, #map-canvas {
-        margin: 0;
-        padding: 0;
-        height: 100%;
-        }
-    </style>
-    <script>
+<title></title>
+<meta charset="utf-8">
+<meta name="viewport" content="initial-scale=1.0, user-scalable=no">
+<link rel="stylesheet" href="http://cdn.leafletjs.com/leaflet-0.6.4/leaflet.css"/>
+<script src="http://cdn.leafletjs.com/leaflet-0.6.4/leaflet.js"></script>
+<style>
+    html, body, #map-canvas {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    }
+</style>
+<script>
 
 var map;
 var parts;
@@ -43,8 +43,8 @@ function initialize() {
     parts = (track_data+"").split('|');
     points = [];
     var markers = [];
-    var cur_points = null;
 
+    var last_mark = false;
     for (var i in parts){
         var p = parts[i].split(',');
         var lat = parseFloat(p[0]);
@@ -64,30 +64,37 @@ function initialize() {
                     break;
             }
             var point = [ lat, lon ];
-            if ((cur_points != null) && cur_points.length){
-                var last = cur_points[cur_points.length - 1];
-                last.points.push(point);
-                if (last.index == index)
-                    index = -1;
+            if (last_mark){
+                last_mark = false;
+            }else{
+                if (points.length){
+                    var last = points[points.length - 1];
+                    last.points.push(point);
+                    if (last.index == index)
+                        index = -1;
+                }
             }
             if (index >= 0){
                 var last = {
                     index:  index,
                     points: [ point ]
                 }
-                if (cur_points == null)
-                    cur_points = [];
-                cur_points.push(last);
+                points.push(last);
             }
-        }else{
+        }else if (p.length == 3){
             markers.push(p);
-            if (cur_points != null)
-                points.push(cur_points);
-            cur_points = null;
+            last_mark = true;
+        }else{
+            last_mark = true;
         }
     }
-    if (cur_points != null)
-        ponts.push(cur_points);
+
+    var d_lat = (max_lat - min_lat) / 10;
+    min_lat -= d_lat;
+    max_lat += d_lat;
+    var d_lon = (max_lon - min_lon) / 10;
+    min_lon -= d_lon;
+    max_lon += d_lon;
 
     var lat = (min_lat + max_lat) / 2;
     var lon = (min_lon + max_lon) / 2;
@@ -100,7 +107,7 @@ function initialize() {
 	var zoom = map.getBoundsZoom([[min_lat, min_lon], [max_lat, max_lon]]);
 	map.setZoom(zoom);
 
-	L.tileLayer('http://otile1.mqcdn.com/tiles/1.0.0/osm/{z}/{x}/{y}.png', {
+    L.tileLayer('http://otile1.mqcdn.com/tiles/1.0.0/osm/{z}/{x}/{y}.png', {
 	    maxZoom: 19
 	}).addTo(map);
 
@@ -134,19 +141,16 @@ function showTrack() {
     tracks = [];
     var traffic = android.traffic();
     for (var i in points){
-        var cur_points = points[i];
-        for (var n in cur_points){
-            var p = cur_points[n];
-            var line = L.polyline(p.points,
-                {
-                    color: traffic ? colors[p.index][1] : '#000080',
-                    weight: 4,
-                    opacity: 1
-                })
-                .addTo(map);
-            tracks.push(line);
-            line.on('click', showPointInfo);
-        }
+        var p = points[i];
+        var line = L.polyline(p.points,
+            {
+                color: traffic ? colors[p.index][1] : '#000080',
+                weight: 4,
+                opacity: 1
+            })
+            .addTo(map);
+        tracks.push(line);
+        line.on('click', showPointInfo);
     }
 }
 
@@ -196,7 +200,10 @@ function shareTrack() {
 
 
 
-    </script>
+
+
+
+</script>
 </head>
 <body onload="initialize()">
 <div id="map" style="height: 100%"></div>

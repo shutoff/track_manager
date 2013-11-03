@@ -11,8 +11,11 @@ import android.text.SpannedString;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
+import android.view.ViewConfiguration;
 import android.webkit.JavascriptInterface;
 import android.widget.Toast;
+
+import org.joda.time.LocalDateTime;
 
 import java.io.BufferedWriter;
 import java.io.ByteArrayInputStream;
@@ -22,6 +25,7 @@ import java.io.FileOutputStream;
 import java.io.ObjectInput;
 import java.io.ObjectInputStream;
 import java.io.OutputStreamWriter;
+import java.lang.reflect.Field;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Vector;
@@ -30,40 +34,117 @@ public class TrackView extends WebViewActivity {
 
     SharedPreferences preferences;
     Vector<Tracks.Track> tracks;
+    Menu topSubMenu;
 
     class JsInterface {
 
         @JavascriptInterface
         public String getTrack() {
+            Vector<Marker> markers = new Vector<Marker>();
             StringBuilder track_data = new StringBuilder();
-            for (Tracks.Track track : tracks) {
-                Tracks.Point p = track.points.get(0);
-                if (track_data.length() > 0)
-                    track_data.append("|");
-                track_data.append(p.lat);
-                track_data.append(",");
-                track_data.append(p.lng);
-                track_data.append(",");
-                track_data.append(infoMark(p.time, track.start));
-                for (Tracks.Point point : track.points) {
-                    track_data.append("|");
-                    track_data.append(point.lat);
-                    track_data.append(",");
-                    track_data.append(point.lng);
-                    track_data.append(",");
-                    track_data.append((int) point.speed);
-                    track_data.append(",");
-                    track_data.append(point.time);
+            try {
+                for (int i = 0; i < tracks.size(); i++) {
+                    Tracks.Track track = tracks.get(i);
+                    Tracks.Point start = track.points.get(0);
+                    Tracks.Point finish = track.points.get(track.points.size() - 1);
+                    int n_start = markers.size();
+                    double d_best = 100.;
+                    for (int n = 0; n < markers.size(); n++) {
+                        Marker marker = markers.get(n);
+                        double delta = Tracks.calc_distance(start.lat, start.lng, marker.latitude, marker.longitude);
+                        if (delta < d_best) {
+                            d_best = delta;
+                            n_start = n;
+                        }
+                    }
+                    if (n_start >= markers.size()) {
+                        Marker marker = new Marker();
+                        marker.latitude = start.lat;
+                        marker.longitude = start.lng;
+                        marker.address = track.start;
+                        marker.times = new Vector<TimeInterval>();
+                        markers.add(marker);
+                    }
+                    Marker marker = markers.get(n_start);
+                    if ((marker.times.size() == 0) || (marker.times.get(marker.times.size() - 1).end > 0)) {
+                        TimeInterval interval = new TimeInterval();
+                        marker.times.add(interval);
+                    }
+                    marker.times.get(marker.times.size() - 1).end = track.points.get(0).time;
+
+                    if (i > 0) {
+                        Tracks.Track prev = tracks.get(i - 1);
+                        Tracks.Point last = prev.points.get(prev.points.size() - 1);
+                        double delta = Tracks.calc_distance(start.lat, start.lng, last.lat, last.lng);
+                        if (delta > 200)
+                            track_data.append("|");
+                    }
+                    for (Tracks.Point p : track.points) {
+                        track_data.append(p.lat);
+                        track_data.append(",");
+                        track_data.append(p.lng);
+                        track_data.append(",");
+                        track_data.append(p.speed);
+                        track_data.append(",");
+                        track_data.append(p.time);
+                        track_data.append("|");
+                    }
+
+                    int n_finish = markers.size();
+                    d_best = 100;
+                    for (int n = 0; n < markers.size(); n++) {
+                        if (n == n_start)
+                            continue;
+                        marker = markers.get(n);
+                        double delta = Tracks.calc_distance(finish.lat, finish.lng, marker.latitude, marker.longitude);
+                        if (delta < d_best) {
+                            n_finish = n;
+                            d_best = delta;
+                        }
+                    }
+                    if (n_finish >= markers.size()) {
+                        marker = new Marker();
+                        marker.latitude = finish.lat;
+                        marker.longitude = finish.lng;
+                        marker.address = track.finish;
+                        marker.times = new Vector<TimeInterval>();
+                        markers.add(marker);
+                    }
+                    marker = markers.get(n_finish);
+                    TimeInterval interval = new TimeInterval();
+                    interval.begin = track.points.get(track.points.size() - 1).time;
+                    marker.times.add(interval);
                 }
-                p = track.points.get(track.points.size() - 1);
                 track_data.append("|");
-                track_data.append(p.lat);
-                track_data.append(",");
-                track_data.append(p.lng);
-                track_data.append(",");
-                track_data.append(infoMark(p.time, track.finish));
+                for (Marker marker : markers) {
+                    track_data.append("|");
+                    track_data.append(marker.latitude);
+                    track_data.append(",");
+                    track_data.append(marker.longitude);
+                    track_data.append(",<b>");
+                    for (TimeInterval interval : marker.times) {
+                        if (interval.begin > 0) {
+                            LocalDateTime begin = new LocalDateTime(interval.begin);
+                            track_data.append(begin.toString("HH:mm"));
+                            if (interval.end > 0)
+                                track_data.append("-");
+                        }
+                        if (interval.end > 0) {
+                            LocalDateTime end = new LocalDateTime(interval.end);
+                            track_data.append(end.toString("HH:mm"));
+                        }
+                        track_data.append(" ");
+                    }
+                    track_data.append("</b><br/>");
+                    track_data.append(Html.toHtml(new SpannedString(marker.address))
+                            .replaceAll(",", "&#x2C;")
+                            .replaceAll("\\|", "&#x7C;"));
+                }
+            } catch (Exception ex) {
+                ex.printStackTrace();
             }
-            return track_data.toString();
+            String res = track_data.toString();
+            return res;
         }
 
         @JavascriptInterface
@@ -83,7 +164,7 @@ public class TrackView extends WebViewActivity {
 
         @JavascriptInterface
         public String traffic() {
-            return preferences.getBoolean("traffic", true) ? "1" : "";
+            return preferences.getBoolean(Names.TRAFFIC, true) ? "1" : "";
         }
     }
 
@@ -111,7 +192,10 @@ public class TrackView extends WebViewActivity {
             finish();
         }
         webView.addJavascriptInterface(new JsInterface(), "android");
-        preferences = PreferenceManager.getDefaultSharedPreferences(this);
+        return getURL();
+    }
+
+    String getURL() {
         if (preferences.getString("map_type", "").equals("OSM"))
             return "file:///android_asset/html/otrack.html";
         return "file:///android_asset/html/track.html";
@@ -119,25 +203,73 @@ public class TrackView extends WebViewActivity {
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        try {
+            ViewConfiguration config = ViewConfiguration.get(this);
+            Field menuKeyField = ViewConfiguration.class.getDeclaredField("sHasPermanentMenuKey");
+            if (menuKeyField != null) {
+                menuKeyField.setAccessible(true);
+                menuKeyField.setBoolean(config, false);
+            }
+        } catch (Exception ex) {
+            // Ignore
+        }
+        preferences = PreferenceManager.getDefaultSharedPreferences(this);
         super.onCreate(savedInstanceState);
         setTitle(getIntent().getStringExtra(Names.TITLE));
     }
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
+        topSubMenu = menu;
         MenuInflater inflater = getMenuInflater();
         inflater.inflate(R.menu.track, menu);
+        menu.findItem(R.id.traffic).setTitle(getCheckedText(R.string.traffic, preferences.getBoolean(Names.TRAFFIC, true)));
+        boolean isOSM = preferences.getString("map_type", "").equals("OSM");
+        menu.findItem(R.id.google).setTitle(getCheckedText(R.string.google, !isOSM));
+        menu.findItem(R.id.osm).setTitle(getCheckedText(R.string.osm, isOSM));
         return super.onCreateOptionsMenu(menu);
+    }
+
+    String getCheckedText(int id, boolean check) {
+        String check_mark = check ? "\u2714" : "";
+        return check_mark + getString(id);
+    }
+
+    void updateMenu() {
+        topSubMenu.clear();
+        onCreateOptionsMenu(topSubMenu);
     }
 
     public boolean onOptionsItemSelected(MenuItem item) {
         switch (item.getItemId()) {
-            case R.id.save: {
+            case R.id.save:
                 webView.loadUrl("javascript:saveTrack()");
                 break;
-            }
-            case R.id.share: {
+            case R.id.share:
                 webView.loadUrl("javascript:shareTrack()");
+                break;
+            case R.id.traffic: {
+                SharedPreferences.Editor ed = preferences.edit();
+                ed.putBoolean(Names.TRAFFIC, !preferences.getBoolean(Names.TRAFFIC, true));
+                ed.commit();
+                updateMenu();
+                webView.loadUrl(getURL());
+                break;
+            }
+            case R.id.google: {
+                SharedPreferences.Editor ed = preferences.edit();
+                ed.putString(Names.MAP_TYPE, "Google");
+                ed.commit();
+                updateMenu();
+                webView.loadUrl(getURL());
+                break;
+            }
+            case R.id.osm: {
+                SharedPreferences.Editor ed = preferences.edit();
+                ed.putString(Names.MAP_TYPE, "OSM");
+                ed.commit();
+                updateMenu();
+                webView.loadUrl(getURL());
                 break;
             }
         }
@@ -242,11 +374,16 @@ public class TrackView extends WebViewActivity {
         return new SimpleDateFormat(format).format(d);
     }
 
-    static String infoMark(long t, String address) {
-        Date d = new Date(t);
-        String time = String.format("%02d:%02d", d.getHours(), d.getMinutes());
-        return "<b>" + time + "</b><br/>" + Html.toHtml(new SpannedString(address))
-                .replaceAll(",", "&#x2C;")
-                .replaceAll("\\|", "&#x7C;");
+    static class TimeInterval {
+        long begin;
+        long end;
     }
+
+    static class Marker {
+        double latitude;
+        double longitude;
+        String address;
+        Vector<TimeInterval> times;
+    }
+
 }

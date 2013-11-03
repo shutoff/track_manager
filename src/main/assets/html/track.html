@@ -57,8 +57,7 @@ function initialize() {
     points = [];
     var markers = [];
 
-    var cur_points = null;
-
+    var last_mark = false;
     for (var i in parts){
         var p = parts[i].split(',');
         var lat = parseFloat(p[0]);
@@ -78,30 +77,37 @@ function initialize() {
                     break;
             }
             var point = new google.maps.LatLng(lat, lon);
-            if ((cur_points != null) && cur_points.length){
-                var last = cur_points[cur_points.length - 1];
-                last.points.push(point);
-                if (last.index == index)
-                    index = -1;
+            if (last_mark){
+                last_mark = false;
+            }else{
+                if (points.length){
+                    var last = points[points.length - 1];
+                    last.points.push(point);
+                    if (last.index == index)
+                        index = -1;
+                }
             }
             if (index >= 0){
                 var last = {
                     index:  index,
                     points: [ point ]
                 }
-                if (cur_points == null)
-                    cur_points = [];
-                cur_points.push(last);
+                points.push(last);
             }
-        }else{
+        }else if (p.length == 3){
             markers.push(p);
-            if (cur_points != null)
-                points.push(cur_points);
-            cur_points = null;
+            last_mark = true;
+        }else{
+            last_mark = true;
         }
     }
-    if (cur_points != null)
-        ponts.push(cur_points);
+
+    var d_lat = (max_lat - min_lat) / 10;
+    min_lat -= d_lat;
+    max_lat += d_lat;
+    var d_lon = (max_lon - min_lon) / 10;
+    min_lon -= d_lon;
+    max_lon += d_lon;
 
     var lat = (min_lat + max_lat) / 2;
     var lon = (min_lon + max_lon) / 2;
@@ -150,20 +156,17 @@ function showTrack() {
 
     var traffic = android.traffic();
     for (var i in points){
-        var cur_points = points[i];
-        for (var n in cur_points){
-            var p = cur_points[n];
-            var track = new google.maps.Polyline({
-                path: p.points,
-                strokeColor: traffic ? colors[p.index][1] : '#000080',
-                strokeOpacity: 1.0,
-                strokeWeight: 3,
-                geodesic: true
-            });
-            track.setMap(map);
-            tracks.push(track);
-            google.maps.event.addListener(track, 'click', showPointInfo);
-        }
+        var p = points[i];
+        var track = new google.maps.Polyline({
+            path: p.points,
+            strokeColor: traffic ? colors[p.index][1] : '#000080',
+            strokeOpacity: 1.0,
+            strokeWeight: 3,
+            geodesic: true
+        });
+        track.setMap(map);
+        tracks.push(track);
+        google.maps.event.addListener(track, 'click', showPointInfo);
     }
 }
 
@@ -214,6 +217,9 @@ function shareTrack() {
 }
 
 google.maps.event.addDomListener(window, 'load', initialize);
+
+
+
 
 
 

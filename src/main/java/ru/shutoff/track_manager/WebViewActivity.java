@@ -1,17 +1,40 @@
 package ru.shutoff.track_manager;
 
+import android.content.Intent;
+import android.net.MailTo;
 import android.os.Bundle;
 import android.support.v7.app.ActionBarActivity;
+import android.util.Log;
 import android.view.ViewGroup;
 import android.webkit.ConsoleMessage;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
+import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 
-abstract public class WebViewActivity extends ActionBarActivity {
+public class WebViewActivity extends ActionBarActivity {
 
-    abstract String loadURL();
+    String url;
+
+    String loadURL() {
+        WebViewClient mWebClient = new WebViewClient() {
+
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, String url) {
+                if (url.startsWith("mailto:")) {
+                    MailTo mt = MailTo.parse(url);
+                    Intent i = newEmailIntent(mt.getTo(), mt.getSubject(), mt.getBody(), mt.getCc());
+                    startActivity(i);
+                    view.reload();
+                    return true;
+                }
+                return false;
+            }
+        };
+        webView.setWebViewClient(mWebClient);
+        return url;
+    }
 
     FrameLayout holder;
     WebView webView;
@@ -19,6 +42,9 @@ abstract public class WebViewActivity extends ActionBarActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        Intent intent = getIntent();
+        if (intent != null)
+            url = intent.getStringExtra(Names.URL);
         setContentView(R.layout.webview);
         webView = (WebView) getLastCustomNonConfigurationInstance();
         initUI();
@@ -36,12 +62,16 @@ abstract public class WebViewActivity extends ActionBarActivity {
             WebChromeClient mChromeClient = new WebChromeClient() {
                 @Override
                 public void onConsoleMessage(String message, int lineNumber, String sourceID) {
+                    Log.v("ChromeClient", "invoked: onConsoleMessage() - " + sourceID + ":"
+                            + lineNumber + " - " + message);
                     super.onConsoleMessage(message, lineNumber, sourceID);
                 }
 
                 @Override
                 public boolean onConsoleMessage(ConsoleMessage cm) {
-                    String message = cm.message();
+                    Log.v("ChromeClient", cm.message() + " -- From line "
+                            + cm.lineNumber() + " of "
+                            + cm.sourceId());
                     return true;
                 }
             };
@@ -57,4 +87,15 @@ abstract public class WebViewActivity extends ActionBarActivity {
             holder.removeView(webView);
         return webView;
     }
+
+    public static Intent newEmailIntent(String address, String subject, String body, String cc) {
+        Intent intent = new Intent(Intent.ACTION_SEND);
+        intent.putExtra(Intent.EXTRA_EMAIL, new String[]{address});
+        intent.putExtra(Intent.EXTRA_TEXT, body);
+        intent.putExtra(Intent.EXTRA_SUBJECT, subject);
+        intent.putExtra(Intent.EXTRA_CC, cc);
+        intent.setType("message/rfc822");
+        return intent;
+    }
 }
+

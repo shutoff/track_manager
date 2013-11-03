@@ -713,6 +713,8 @@ public class CaldroidFragment extends DialogFragment {
     }
 
     protected boolean isDateEnabled(DateTime date) {
+        if (caldroidListener != null)
+            return caldroidListener.isDateEnabled(date);
         return true;
     }
 

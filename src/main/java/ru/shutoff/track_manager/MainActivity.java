@@ -1,6 +1,5 @@
 package ru.shutoff.track_manager;
 
-import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -9,6 +8,7 @@ import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Environment;
 import android.preference.PreferenceManager;
+import android.support.v4.app.FragmentTransaction;
 import android.support.v7.app.ActionBarActivity;
 import android.view.LayoutInflater;
 import android.view.Menu;
@@ -19,53 +19,48 @@ import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.widget.AdapterView;
 import android.widget.BaseAdapter;
-import android.widget.Button;
 import android.widget.ListView;
-import android.widget.ProgressBar;
 import android.widget.TextView;
 
 import org.joda.time.DateTime;
 import org.joda.time.LocalDateTime;
 
-import java.io.ByteArrayOutputStream;
 import java.io.File;
-import java.io.FileOutputStream;
-import java.io.ObjectOutput;
-import java.io.ObjectOutputStream;
+import java.io.FileFilter;
 import java.lang.reflect.Field;
-import java.text.SimpleDateFormat;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.Vector;
 
 public class MainActivity extends ActionBarActivity {
 
+    CaldroidFragment caldroidFragment;
+    boolean mode;
+    Menu topSubMenu;
     SharedPreferences preferences;
 
-    Vector<Tracks.Track> tracks;
-
-    CaldroidFragment dialogCaldroidFragment;
-
-    ProgressBar progressFirst;
-    ProgressBar progressBar;
-    TextView tvLoading;
-    TextView tvStatus;
-    ListView lvTracks;
-    TextView tvRemove;
-    Button btnRemove;
+    File path;
+    Object[] entries;
     Date current;
-
-    int task_id;
-    int month;
-    int year;
-    String cur_task;
-    File track_file;
-
-    int progress;
-    boolean loaded;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        try {
+            File file = new File(getIntent().getData().getPath());
+            if (file != null) {
+                Intent intent = new Intent(MainActivity.this, TracksActivity.class);
+                intent.putExtra(Names.TITLE, file.getName());
+                intent.putExtra(Names.PATH, file.getAbsolutePath());
+                startActivity(intent);
+                finish();
+            }
+        } catch (Exception ex) {
+            // ignore
+        }
+
         try {
             ViewConfiguration config = ViewConfiguration.get(this);
             Field menuKeyField = ViewConfiguration.class.getDeclaredField("sHasPermanentMenuKey");
@@ -76,349 +71,253 @@ public class MainActivity extends ActionBarActivity {
         } catch (Exception ex) {
             // Ignore
         }
+        setContentView(R.layout.main);
 
         preferences = PreferenceManager.getDefaultSharedPreferences(this);
-        setContentView(R.layout.tracks);
-        progressFirst = (ProgressBar) findViewById(R.id.first_progress);
-        progressBar = (ProgressBar) findViewById(R.id.progress);
-        tvLoading = (TextView) findViewById(R.id.loading);
-        tvStatus = (TextView) findViewById(R.id.status);
-        lvTracks = (ListView) findViewById(R.id.tracks);
-        tvRemove = (TextView) findViewById(R.id.remove_warn);
-        btnRemove = (Button) findViewById(R.id.delete);
+        mode = preferences.getBoolean(Names.MODE, false);
+        path = Environment.getExternalStorageDirectory();
+        current = new Date();
 
-        lvTracks.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+        caldroidFragment = new CaldroidFragment();
+        if (savedInstanceState != null) {
+            caldroidFragment.restoreStatesFromKey(savedInstanceState,
+                    "CALDROID_SAVED_STATE");
+            mode = savedInstanceState.getBoolean(Names.MODE, mode);
+            String saved_path = savedInstanceState.getString(Names.PATH);
+            if (saved_path != null)
+                path = new File(saved_path);
+            current = new Date(savedInstanceState.getLong(Names.CURRENT, current.getTime()));
+        } else {
+            Bundle args = new Bundle();
+            LocalDateTime d = new LocalDateTime();
+            int year = d.getYear();
+            int month = d.getMonthOfYear();
+            args.putInt(CaldroidFragment.MONTH, month);
+            args.putInt(CaldroidFragment.YEAR, year);
+            args.putInt(CaldroidFragment.START_DAY_OF_WEEK, 1);
+            caldroidFragment.setArguments(args);
+        }
+
+        LocalDateTime now = new LocalDateTime();
+        caldroidFragment.setMaxDate(now.toDate());
+        caldroidFragment.setSelectedDates(current, current);
+        caldroidFragment.setCaldroidListener(new CaldroidListener() {
+            @Override
+            public void onSelectDate(Date date, View view) {
+                Intent intent = new Intent(MainActivity.this, TracksActivity.class);
+                LocalDateTime d = new LocalDateTime(date);
+                intent.putExtra(Names.TITLE, d.toString("dd MMMM"));
+                File file = Environment.getExternalStorageDirectory();
+                file = new File(file, Tracks.TRACK_FOLDER);
+                file = new File(file, String.format("%04d_%02d_%02d_gps.plt", d.getYear(), d.getMonthOfYear(), d.getDayOfMonth()));
+                intent.putExtra(Names.PATH, file.getAbsolutePath());
+                startActivity(intent);
+            }
+
+            @Override
+            public boolean isDateEnabled(DateTime date) {
+                File file = Environment.getExternalStorageDirectory();
+                file = new File(file, Tracks.TRACK_FOLDER);
+                file = new File(file, String.format("%04d_%02d_%02d_gps.plt", date.getYear(), date.getMonthOfYear(), date.getDayOfMonth()));
+                return file.exists();
+            }
+        });
+
+        FragmentTransaction t = getSupportFragmentManager().beginTransaction();
+        t.replace(R.id.calendar, caldroidFragment);
+        t.commit();
+
+        ListView list = (ListView) findViewById(R.id.files);
+        list.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             @Override
             public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
-                TracksAdapter adapter = (TracksAdapter) lvTracks.getAdapter();
-                if (adapter.selected == position) {
-                    showTrack(position);
+                DirEntry entry = (DirEntry) entries[position];
+                if (entry.type == 0) {
+                    Intent intent = new Intent(MainActivity.this, TracksActivity.class);
+                    intent.putExtra(Names.TITLE, entry.name);
+                    File file = new File(path, entry.name);
+                    intent.putExtra(Names.PATH, file.getAbsolutePath());
+                    startActivity(intent);
                     return;
                 }
-                adapter.selected = position;
-                adapter.notifyDataSetChanged();
+                if (entry.type == 2) {
+                    path = path.getParentFile();
+                } else {
+                    path = new File(path, entry.name);
+                }
+                findViewById(R.id.progress).setVisibility(View.VISIBLE);
+                findViewById(R.id.files).setVisibility(View.GONE);
+                entries = null;
+                loadDirectory();
             }
         });
 
-        tvStatus.setClickable(true);
-        tvStatus.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                if (loaded)
-                    showDay();
-            }
-        });
-
-        try {
-            File file = new File(getIntent().getData().getPath());
-            tracks = Tracks.loadPlt(file);
-            if (tracks == null)
-                tracks = Tracks.loadGpx(file);
-        } catch (Exception ex) {
-            // ignore
-        }
-
-        current = new Date();
-        if (tracks != null) {
-            tracksDone();
-        } else {
-            changeDate(new Date());
-        }
-
-        btnRemove.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                track_file.delete();
-                track_file = null;
-                tvRemove.setVisibility(View.GONE);
-                btnRemove.setVisibility(View.GONE);
-            }
-        });
+        setMode();
     }
 
     @Override
-    protected void onDestroy() {
-        super.onDestroy();
+    protected void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+        caldroidFragment.saveStatesToKey(outState, "CALDROID_SAVED_STATE");
+        outState.putBoolean(Names.MODE, mode);
+        outState.putString(Names.PATH, path.getAbsolutePath());
+        outState.putLong(Names.CURRENT, current.getTime());
     }
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
+        topSubMenu = menu;
         MenuInflater inflater = getMenuInflater();
-        inflater.inflate(R.menu.tracks, menu);
+        inflater.inflate(mode ? R.menu.files : R.menu.calendar, menu);
         return super.onCreateOptionsMenu(menu);
     }
 
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
         switch (item.getItemId()) {
-            case R.id.day: {
-                dialogCaldroidFragment = new CaldroidFragment() {
-
-                    @Override
-                    public void onAttach(Activity activity) {
-                        super.onAttach(activity);
-                        CaldroidListener listener = new CaldroidListener() {
-
-                            @Override
-                            public void onSelectDate(Date date, View view) {
-                                dialogCaldroidFragment.dismiss();
-                                dialogCaldroidFragment = null;
-                                changeDate(date);
-                            }
-                        };
-                        dialogCaldroidFragment = this;
-                        setCaldroidListener(listener);
-                    }
-
-                    @Override
-                    protected boolean isDateEnabled(DateTime date) {
-                        File file = Environment.getExternalStorageDirectory();
-                        file = new File(file, Tracks.TRACK_FOLDER);
-                        file = new File(file, String.format("%04d_%02d_%02d_gps.plt", date.getYear(), date.getMonthOfYear(), date.getDayOfMonth()));
-                        return file.exists();
-                    }
-                };
-                Bundle args = new Bundle();
-                args.putString(CaldroidFragment.DIALOG_TITLE, getString(R.string.day));
-                args.putInt(CaldroidFragment.MONTH, month);
-                args.putInt(CaldroidFragment.YEAR, year);
-                args.putInt(CaldroidFragment.START_DAY_OF_WEEK, 1);
-                dialogCaldroidFragment.setArguments(args);
-                LocalDateTime now = new LocalDateTime();
-                dialogCaldroidFragment.setMaxDate(now.toDate());
-                dialogCaldroidFragment.setSelectedDates(current, current);
-                dialogCaldroidFragment.show(getSupportFragmentManager(), "TAG");
-                break;
-            }
+            case R.id.file:
+                mode = true;
+                setMode();
+                return true;
+            case R.id.day:
+                mode = false;
+                setMode();
+                return true;
             case R.id.preferences: {
                 Intent i = new Intent(this, Preferences.class);
                 startActivity(i);
                 break;
             }
         }
-        return false;
+        return super.onOptionsItemSelected(item);
     }
 
-    void changeDate(final Date d) {
-        loaded = false;
-        current = d;
-        progressFirst.setVisibility(View.VISIBLE);
-        progressBar.setVisibility(View.GONE);
-        tvLoading.setVisibility(View.VISIBLE);
-        tvStatus.setVisibility(View.GONE);
-        lvTracks.setVisibility(View.GONE);
-        tvRemove.setVisibility(View.GONE);
-        btnRemove.setVisibility(View.GONE);
-        task_id++;
-        cur_task = task_id + "";
-        month = d.getMonth() + 1;
-        year = d.getYear() + 1900;
-
-        track_file = Environment.getExternalStorageDirectory();
-        track_file = new File(track_file, Tracks.TRACK_FOLDER);
-        track_file = new File(track_file, String.format("%04d_%02d_%02d_gps.plt", year, month, d.getDate()));
-
-        setTitle(format(d, "d MMMM yyyy"));
-        if (!track_file.exists()) {
-            track_file = null;
-            tracksDone();
-            return;
+    void setMode() {
+        findViewById(R.id.calendar).setVisibility(mode ? View.GONE : View.VISIBLE);
+        findViewById(R.id.progress).setVisibility(View.GONE);
+        findViewById(R.id.files).setVisibility(View.GONE);
+        if (topSubMenu != null) {
+            topSubMenu.clear();
+            onCreateOptionsMenu(topSubMenu);
         }
+        SharedPreferences.Editor ed = preferences.edit();
+        ed.putBoolean(Names.MODE, mode);
+        ed.commit();
+        if (mode) {
+            if (entries == null) {
+                loadDirectory();
+                return;
+            }
+            ListView list = (ListView) findViewById(R.id.files);
+            list.setAdapter(new FilesAdapter());
+            list.setVisibility(View.VISIBLE);
+        }
+    }
 
-        AsyncTask<String, Void, String> task = new AsyncTask<String, Void, String>() {
+    void loadDirectory() {
+        if (!path.exists())
+            path = Environment.getExternalStorageDirectory();
+        AsyncTask<String, Void, Object[]> task = new AsyncTask<String, Void, Object[]>() {
+
             @Override
-            protected String doInBackground(String... params) {
-                if (cur_task.equals(params[0]))
-                    tracks = Tracks.loadPlt(track_file);
-                return params[0];
+            protected Object[] doInBackground(String... params) {
+                File dir = new File(params[0]);
+
+                Object[] root_dir = new Object[0];
+                if (!dir.getAbsolutePath().equals("/")) {
+                    DirEntry entry = new DirEntry();
+                    entry.name = "..";
+                    entry.type = 2;
+                    root_dir = new Object[1];
+                    root_dir[0] = entry;
+                }
+
+                File[] files = dir.listFiles(new FileFilter() {
+                    @Override
+                    public boolean accept(File pathname) {
+                        if (pathname.isHidden())
+                            return false;
+                        return pathname.isDirectory();
+                    }
+                });
+                Vector<DirEntry> dirs = new Vector<DirEntry>();
+                if (files != null) {
+                    for (File f : files) {
+                        DirEntry entry = new DirEntry();
+                        entry.name = f.getName();
+                        entry.type = 1;
+                        dirs.add(entry);
+                    }
+                    Collections.sort(dirs, new Comparator<DirEntry>() {
+                        @Override
+                        public int compare(DirEntry lhs, DirEntry rhs) {
+                            return lhs.name.toUpperCase().compareTo(rhs.name.toUpperCase());
+                        }
+                    });
+                }
+                Object[] res_dir = dirs.toArray();
+
+                files = dir.listFiles(new FileFilter() {
+                    @Override
+                    public boolean accept(File pathname) {
+                        if (pathname.isHidden() || pathname.isDirectory())
+                            return false;
+                        String name = pathname.getName();
+                        int pos = name.lastIndexOf(".");
+                        if (pos < 0)
+                            return false;
+                        name = name.substring(pos + 1).toLowerCase();
+                        return name.equals("plt") || name.equals("gpx");
+                    }
+                });
+                dirs = new Vector<DirEntry>();
+                if (files != null) {
+                    for (File f : files) {
+                        DirEntry entry = new DirEntry();
+                        entry.name = f.getName();
+                        entry.type = 0;
+                        dirs.add(entry);
+                    }
+                    Collections.sort(dirs, new Comparator<DirEntry>() {
+                        @Override
+                        public int compare(DirEntry lhs, DirEntry rhs) {
+                            return lhs.name.toUpperCase().compareTo(rhs.name.toUpperCase());
+                        }
+                    });
+                }
+                Object[] res_files = dirs.toArray();
+
+                Object[] res = new Object[root_dir.length + res_dir.length + res_files.length];
+                System.arraycopy(root_dir, 0, res, 0, root_dir.length);
+                System.arraycopy(res_dir, 0, res, root_dir.length, res_dir.length);
+                System.arraycopy(res_files, 0, res, root_dir.length + res_dir.length, res_files.length);
+                return res;
             }
 
             @Override
-            protected void onPostExecute(String aVoid) {
-                if (cur_task.equals(aVoid))
-                    tracksDone();
+            protected void onPostExecute(Object[] dirEntries) {
+                entries = dirEntries;
+                if (mode) {
+                    ListView list = (ListView) findViewById(R.id.files);
+                    list.setAdapter(new FilesAdapter());
+                    list.setVisibility(View.VISIBLE);
+                    findViewById(R.id.progress).setVisibility(View.GONE);
+                }
             }
         };
-        task.execute(cur_task);
+        task.execute(path.getAbsolutePath());
     }
 
-    void tracksDone() {
-        progressFirst.setVisibility(View.GONE);
-        progressBar.setVisibility(View.VISIBLE);
-        if ((tracks == null) || (tracks.size() == 0)) {
-            showError(getString(R.string.no_data));
-            if (track_file != null) {
-                tvRemove.setVisibility(View.VISIBLE);
-                btnRemove.setVisibility(View.VISIBLE);
-            }
-            return;
-        }
-        double mileage = 0;
-        long time = 0;
-        for (Tracks.Track track : tracks) {
-            mileage += track.mileage;
-            time += track.getTime();
-        }
-        tvStatus.setText(String.format(getString(R.string.status), mileage / 1000, timeFormat((int) (time / 60)), mileage * 3.6 / time));
-        tvStatus.setVisibility(View.VISIBLE);
-        progressBar.setMax(tracks.size() * 2 + 1);
-        progress = 1;
-        progressBar.setProgress(1);
-        TrackStartPositionFetcher fetcher = new TrackStartPositionFetcher();
-        fetcher.update(task_id, 0);
-    }
-
-    void allDone() {
-        progressFirst.setVisibility(View.GONE);
-        tvLoading.setVisibility(View.GONE);
-        progressBar.setVisibility(View.GONE);
-        lvTracks.setVisibility(View.VISIBLE);
-        lvTracks.setAdapter(new TracksAdapter());
-        loaded = true;
-    }
-
-    void showError(String text) {
-        tvStatus.setText(text);
-        tvStatus.setVisibility(View.VISIBLE);
-        tvLoading.setVisibility(View.GONE);
-        progressFirst.setVisibility(View.GONE);
-        progressBar.setVisibility(View.GONE);
-    }
-
-    abstract class TrackPositionFetcher extends AddressRequest {
-
-        int id;
-        int pos;
-
-        abstract Tracks.Point getPoint(Tracks.Track track);
-
-        abstract TrackPositionFetcher create();
-
-        abstract void process(String[] address);
-
-        abstract void done();
-
-        @Override
-        void addressResult(String[] address) {
-            if (id != task_id)
-                return;
-            if (address == null) {
-                showError(getString(R.string.error));
-                return;
-            }
-
-            process(address);
-            progressBar.setProgress(++progress);
-
-            if (++pos >= tracks.size()) {
-                // All tracks done
-                done();
-                return;
-            }
-            TrackPositionFetcher fetcher = create();
-            fetcher.update(id, pos);
-        }
-
-        void update(int track_id, int track_pos) {
-            id = track_id;
-            pos = track_pos;
-            Tracks.Track track = tracks.get(pos);
-            Tracks.Point p = getPoint(track);
-            getAddress(preferences, p.lat + "", p.lng + "");
-        }
-
-    }
-
-    class TrackStartPositionFetcher extends TrackPositionFetcher {
-
-        @Override
-        Tracks.Point getPoint(Tracks.Track track) {
-            return track.points.get(0);
-        }
-
-        @Override
-        TrackPositionFetcher create() {
-            return new TrackStartPositionFetcher();
-        }
-
-        @Override
-        void process(String[] parts) {
-            String address = parts[0];
-            for (int i = 1; i < parts.length; i++)
-                address += ", " + parts[i];
-            tracks.get(pos).start = address;
-        }
-
-        @Override
-        void done() {
-            TrackPositionFetcher fetcher = new TrackEndPositionFetcher();
-            fetcher.update(id, 0);
-        }
-    }
-
-    class TrackEndPositionFetcher extends TrackPositionFetcher {
-
-        @Override
-        Tracks.Point getPoint(Tracks.Track track) {
-            return track.points.get(track.points.size() - 1);
-        }
-
-        @Override
-        TrackPositionFetcher create() {
-            return new TrackEndPositionFetcher();
-        }
-
-        @Override
-        void process(String[] finish_parts) {
-            Tracks.Track track = tracks.get(pos);
-
-            String[] start_parts = track.start.split(", ");
-
-            int s = start_parts.length - 1;
-            int f = finish_parts.length - 1;
-
-            while ((s > 2) && (f > 2)) {
-                if (!start_parts[s].equals(finish_parts[f]))
-                    break;
-                s--;
-                f--;
-            }
-
-            String address = start_parts[0];
-            for (int i = 1; i < s; i++) {
-                address += ", " + start_parts[i];
-            }
-            track.start = address;
-
-            address = finish_parts[0];
-            for (int i = 1; i < f; i++) {
-                address += ", " + finish_parts[i];
-            }
-            track.finish = address;
-        }
-
-        @Override
-        void done() {
-            allDone();
-        }
-    }
-
-    class TracksAdapter extends BaseAdapter {
-
-        int selected;
-
-        TracksAdapter() {
-            selected = -1;
-        }
+    class FilesAdapter extends BaseAdapter {
 
         @Override
         public int getCount() {
-            return tracks.size();
+            return entries.length;
         }
 
         @Override
         public Object getItem(int position) {
-            return tracks.get(position);
+            return entries[position];
         }
 
         @Override
@@ -432,104 +331,21 @@ public class MainActivity extends ActionBarActivity {
             if (v == null) {
                 LayoutInflater inflater = (LayoutInflater) getBaseContext()
                         .getSystemService(Context.LAYOUT_INFLATER_SERVICE);
-                v = inflater.inflate(R.layout.track_item, null);
+                v = inflater.inflate(R.layout.file_item, null);
             }
-            TextView tvTitle = (TextView) v.findViewById(R.id.title);
-            Tracks.Track track = (Tracks.Track) getItem(position);
-            Date begin = new Date(track.points.get(0).time);
-            Date end = new Date(track.points.get(track.points.size() - 1).time);
-            tvTitle.setText(formatTime(begin) + "-" + formatTime(end));
-            TextView tvMileage = (TextView) v.findViewById(R.id.mileage);
-            String s = String.format(getString(R.string.mileage), track.mileage / 1000);
-            tvMileage.setText(s);
-            TextView tvAddress = (TextView) v.findViewById(R.id.address);
-            tvAddress.setText(track.start + " - " + track.finish);
-            TextView tvStatus = (TextView) v.findViewById(R.id.status);
-            String text = "";
-
-            if (position == selected) {
-                text = String.format(getString(R.string.short_status),
-                        timeFormat((int) (track.getTime() / 60)),
-                        track.mileage * 3.6 / track.getTime());
-                tvTitle.setTypeface(null, Typeface.BOLD);
-                tvMileage.setTypeface(null, Typeface.BOLD);
-            } else {
-                tvTitle.setTypeface(null, Typeface.NORMAL);
-                tvMileage.setTypeface(null, Typeface.NORMAL);
-            }
-            tvStatus.setText(text);
+            TextView tvName = (TextView) v.findViewById(R.id.name);
+            DirEntry entry = (DirEntry) entries[position];
+            tvName.setText(entry.name);
+            tvName.setTypeface(null, (entry.type > 0) ? Typeface.BOLD : Typeface.NORMAL);
             return v;
         }
     }
 
-    void showTrack(int index) {
-        Intent intent = new Intent(this, TrackView.class);
-        Tracks.Track track = tracks.get(index);
-        Vector<Tracks.Track> track_one = new Vector<Tracks.Track>();
-        track_one.add(track);
-        setTrack(track_one, intent);
-        Date begin = new Date(track.points.get(0).time);
-        Date end = new Date(track.points.get(track.points.size() - 1).time);
-        intent.putExtra(Names.TITLE, format(begin, "d MMMM HH:mm") + "-" + format(end, "HH:mm"));
-        startActivity(intent);
+    static class DirEntry {
+        String name;
+        int type;
     }
 
-    void showDay() {
-        Intent intent = new Intent(this, TrackView.class);
-        if (!setTrack(tracks, intent))
-            finish();
-        intent.putExtra(Names.TITLE, getTitle());
-        startActivity(intent);
-    }
-
-    boolean setTrack(Vector<Tracks.Track> tracks, Intent intent) {
-        byte[] data = null;
-        try {
-            ByteArrayOutputStream bos = new ByteArrayOutputStream();
-            ObjectOutput out = new ObjectOutputStream(bos);
-            out.writeObject(tracks);
-            data = bos.toByteArray();
-            out.close();
-            bos.close();
-        } catch (Exception ex) {
-            // ignore
-        }
-        if (data.length > 500000) {
-            try {
-                File outputDir = getCacheDir();
-                File file = File.createTempFile("track", "dat", outputDir);
-                FileOutputStream f = new FileOutputStream(file);
-                f.write(data);
-                intent.putExtra(Names.TRACK_FILE, file.getAbsolutePath());
-                f.close();
-            } catch (Exception ex) {
-                ex.printStackTrace();
-                return false;
-            }
-        } else {
-            intent.putExtra(Names.TRACK, data);
-        }
-        return true;
-    }
-
-
-    String format(Date d, String format) {
-        return new SimpleDateFormat(format).format(d);
-    }
-
-    static String formatTime(Date d) {
-        return String.format("%02d:%02d", d.getHours(), d.getMinutes());
-    }
-
-    String timeFormat(int minutes) {
-        if (minutes < 60) {
-            String s = getString(R.string.m_format);
-            return String.format(s, minutes);
-        }
-        int hours = minutes / 60;
-        minutes -= hours * 60;
-        String s = getString(R.string.hm_format);
-        return String.format(s, hours, minutes);
-    }
+    ;
 
 }

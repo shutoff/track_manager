@@ -10,7 +10,7 @@ import java.util.Locale;
 
 abstract public class AddressRequest {
 
-    static final String GOOGLE_URL = "http://maps.googleapis.com/maps/api/geocode/json?latlng=$1,$2&sensor=false&language=$3";
+    static final String GOOGLE_URL = "https://maps.googleapis.com/maps/api/geocode/json?latlng=$1,$2&sensor=false&language=$3";
     static final String OSM_URL = "http://nominatim.openstreetmap.org/reverse?lat=$1&lon=$2&osm_type=N&format=json&address_details=0&accept-language=$3";
 
     abstract void addressResult(String[] address);
@@ -54,6 +54,13 @@ abstract public class AddressRequest {
                     request.exec(latitude, longitude);
                     return;
                 }
+            }
+
+            if (res.length() == 0) {
+                String[] p = new String[1];
+                p[0] = latitude + "," + longitude;
+                addressResult(p);
+                return;
             }
 
             int i;

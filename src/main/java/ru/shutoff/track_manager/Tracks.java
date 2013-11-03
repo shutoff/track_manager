@@ -1,5 +1,6 @@
 package ru.shutoff.track_manager;
 
+import android.util.Log;
 import android.util.Xml;
 
 import org.xmlpull.v1.XmlPullParser;
@@ -144,11 +145,14 @@ public class Tracks {
             double prev_lng = 0;
             double prev_alt = -777;
             long prev_time = 0;
+            long zone_delta = 0;
             Vector<Point> points = new Vector<Point>();
+            int n_line = 0;
             for (; ; ) {
                 line = reader.readLine();
                 if (line == null)
                     break;
+                n_line++;
                 String[] parts = line.split(",");
                 try {
                     double lat = Double.parseDouble(parts[0]);
@@ -163,7 +167,25 @@ public class Tracks {
                     int min = Integer.parseInt(times[1]);
                     int sec = Integer.parseInt(times[2]);
                     Date dd = new Date(year - 1900, month - 1, day, hour, min, sec);
-                    long time = dd.getTime();
+                    long time = dd.getTime() + zone_delta;
+                    if (prev_time > 0) {
+                        long time_delta = (time - prev_time) / 1000;
+                        if (Math.abs(time_delta) > 60) {
+                            Log.v("v", n_line + ": delta=" + time_delta);
+                            long correction = 0;
+                            while (time_delta < 0) {
+                                time_delta += 3600;
+                                correction -= 3600;
+                            }
+                            if ((time_delta % 3600) < 15) {
+                                correction += (time_delta / 3600) * 3600;
+                                zone_delta -= correction * 1000;
+                                time -= correction * 1000;
+                                Log.v("v", n_line + ": zone " + zone_delta);
+                            }
+                        }
+                    }
+
                     if ((prev_alt != -777) && (alt != -777)) {
                         double da = Math.abs(alt - prev_alt);
                         if (da < 15) {
@@ -209,8 +231,10 @@ public class Tracks {
                         t.points = new Vector<Point>();
                         for (int n = start + 1; n < i; n++) {
                             Point c = points.get(n);
-                            if (c.time < p.time)
+                            if (c.time < p.time) {
+                                Log.v("v", "remove " + c.time + " " + p.time);
                                 continue;
+                            }
                             double distance = calc_distance(p.lat, p.lng, c.lat, c.lng);
                             double speed = (distance * 3600) / (c.time - p.time);
                             if (speed < 250) {
