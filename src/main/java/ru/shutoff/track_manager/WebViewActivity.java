@@ -1,6 +1,9 @@
 package ru.shutoff.track_manager;
 
+import android.content.Context;
 import android.content.Intent;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
 import android.net.MailTo;
 import android.os.Bundle;
 import android.support.v7.app.ActionBarActivity;
@@ -16,6 +19,23 @@ import android.widget.FrameLayout;
 public class WebViewActivity extends ActionBarActivity {
 
     String url;
+
+    static class MyWebView extends WebView {
+
+        public MyWebView(Context context) {
+            super(context);
+        }
+
+        Bitmap getScreenshot() {
+            Bitmap.Config conf = Bitmap.Config.ARGB_8888; // see other conf types
+            Bitmap bmp = Bitmap.createBitmap(getWidth(), getHeight(), conf); // this creates a MUTABLE bitmap
+            Canvas canvas = new Canvas(bmp);
+            onDraw(canvas);
+            return bmp;
+        }
+    }
+
+    ;
 
     String loadURL() {
         WebViewClient mWebClient = new WebViewClient() {
@@ -37,7 +57,7 @@ public class WebViewActivity extends ActionBarActivity {
     }
 
     FrameLayout holder;
-    WebView webView;
+    MyWebView webView;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -46,14 +66,14 @@ public class WebViewActivity extends ActionBarActivity {
         if (intent != null)
             url = intent.getStringExtra(Names.URL);
         setContentView(R.layout.webview);
-        webView = (WebView) getLastCustomNonConfigurationInstance();
+        webView = (MyWebView) getLastCustomNonConfigurationInstance();
         initUI();
     }
 
     void initUI() {
         holder = (FrameLayout) findViewById(R.id.webview);
         if (webView == null) {
-            webView = new WebView(this);
+            webView = new MyWebView(this);
             webView.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.FILL_PARENT, ViewGroup.LayoutParams.FILL_PARENT));
 
             WebSettings settings = webView.getSettings();

@@ -6,6 +6,7 @@
 <meta name="viewport" content="initial-scale=1.0, user-scalable=no">
 <link rel="stylesheet" href="http://cdn.leafletjs.com/leaflet-0.6.4/leaflet.css"/>
 <script src="http://cdn.leafletjs.com/leaflet-0.6.4/leaflet.js"></script>
+<script src="../../../../../android.js"></script>
 <style>
     html, body, #map-canvas {
     margin: 0;
@@ -18,6 +19,8 @@
 var map;
 var parts;
 var points;
+var click_info;
+var click_pos;
 
 var colors =
 [
@@ -106,6 +109,21 @@ function initialize() {
 
 	var zoom = map.getBoundsZoom([[min_lat, min_lon], [max_lat, max_lon]]);
 	map.setZoom(zoom);
+
+    var s9 = function(s){
+        return (s + '').substring(0, 9);
+    }
+
+    map.on('click', function(e){
+        console.log('click', e, e.latlng);
+        if (click_info == null)
+            click_info = L.popup();
+        click_pos = e.latlng;
+        click_info
+            .setLatLng(click_pos)
+            .setContent(s9(click_pos.lat) + ',' + s9(click_pos.lng))
+            .addTo(map);
+    })
 
     L.tileLayer('http://otile1.mqcdn.com/tiles/1.0.0/osm/{z}/{x}/{y}.png', {
 	    maxZoom: 19
@@ -197,11 +215,18 @@ function shareTrack() {
     android.share(sw.lat, ne.lat, sw.lng, ne.lng);
 }
 
-
-
-
-
-
+function screenshot() {
+    var bounds = map.getBounds();
+    var ne = bounds.getNorthEast();
+    var sw = bounds.getSouthWest();
+    var lat = (sw.lat + ne.lat) / 2;
+    var lng = (sw.lng + ne.lng) / 2;
+    if (click_pos){
+        lat = click_pos.lat;
+        lng = click_pos.lng;
+    }
+    android.screenshot(sw.lat, ne.lat, sw.lng, ne.lng, lat, lng);
+}
 
 </script>
 </head>
