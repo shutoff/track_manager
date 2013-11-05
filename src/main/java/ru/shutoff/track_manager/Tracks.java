@@ -21,6 +21,7 @@ public class Tracks {
         double lat;
         double lng;
         double speed;
+        double altitude;
         long time;
     }
 
@@ -190,6 +191,7 @@ public class Tracks {
                             p.lat = prev_lat;
                             p.lng = prev_lng;
                             p.time = prev_time;
+                            p.altitude = prev_alt;
                             points.add(p);
                         }
                     }

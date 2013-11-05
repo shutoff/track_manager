@@ -31,6 +31,7 @@ var map;
 var parts;
 var points;
 var tracks;
+var click_info;
 
 var colors =
 [
@@ -124,6 +125,20 @@ function initialize() {
     var bounds = new google.maps.LatLngBounds(new google.maps.LatLng(min_lat, min_lon), new google.maps.LatLng(max_lat, max_lon));
     map.fitBounds(bounds);
 
+    s9 = function(s){
+        return (s + '').substring(0, 9);
+    }
+
+    google.maps.event.addListener(map, 'click', function(e){
+        if (click_info != null)
+            click_info.setMap(null);
+        click_info = new google.maps.InfoWindow({
+            content: s9(e.latLng.lat()) + ',' + s9(e.latLng.lng()),
+            position: e.latLng
+        });
+        click_info.open(map);
+    })
+
     for (var i in markers){
         (function(i){
             var p = markers[i];
@@ -216,12 +231,21 @@ function shareTrack() {
     android.share(sw.lat(), ne.lat(), sw.lng(), ne.lng());
 }
 
+function screenshot() {
+    var bounds = map.getBounds();
+    var ne = bounds.getNorthEast();
+    var sw = bounds.getSouthWest();
+    var lat = (sw.lat() + ne.lat()) / 2;
+    var lng = (sw.lng() + ne.lng()) / 2;
+    if (click_info){
+        var pos = click_info.getPosition();
+        lat = pos.lat();
+        lng = pos.lng();
+    }
+    android.screenshot(sw.lat(), ne.lat(), sw.lng(), ne.lng(), lat, lng);
+}
+
 google.maps.event.addDomListener(window, 'load', initialize);
-
-
-
-
-
 
 
 </script>

@@ -5,6 +5,7 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
+import android.preference.ListPreference;
 import android.preference.Preference;
 import android.preference.PreferenceActivity;
 import android.preference.PreferenceManager;
@@ -42,6 +43,16 @@ public class Preferences extends PreferenceActivity {
                 Intent intent = new Intent(getBaseContext(), WebViewActivity.class);
                 intent.putExtra(Names.URL, "file:///android_asset/html/donate.html");
                 startActivity(intent);
+                return true;
+            }
+        });
+
+        final ListPreference formatPref = (ListPreference) findPreference(Names.SAVE_FORMAT);
+        formatPref.setSummary(preferences.getString(Names.SAVE_FORMAT, "GPX"));
+        formatPref.setOnPreferenceChangeListener(new Preference.OnPreferenceChangeListener() {
+            @Override
+            public boolean onPreferenceChange(Preference preference, Object newValue) {
+                formatPref.setSummary(newValue.toString());
                 return true;
             }
         });

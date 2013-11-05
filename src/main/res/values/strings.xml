@@ -25,4 +25,10 @@
     <string name="google">Google</string>
     <string name="osm">OSM</string>
     <string name="beer">Beer for developer</string>
+    <string name="save_format">Save track format</string>
+    <array name="save_formats">
+        <item>GPX</item>
+        <item>PLT</item>
+    </array>
+    <string name="shot">Screenshot</string>
 </resources>

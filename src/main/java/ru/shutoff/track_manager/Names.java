@@ -14,4 +14,5 @@ public class Names {
     static final String MAP_TYPE = "map_type";
 
     static final String URL = "url";
+    static final String SAVE_FORMAT = "save_format";
 }

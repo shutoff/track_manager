@@ -2,6 +2,7 @@ package ru.shutoff.track_manager;
 
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
@@ -24,6 +25,7 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.ObjectInput;
 import java.io.ObjectInputStream;
+import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.lang.reflect.Field;
 import java.text.SimpleDateFormat;
@@ -35,6 +37,8 @@ public class TrackView extends WebViewActivity {
     SharedPreferences preferences;
     Vector<Tracks.Track> tracks;
     Menu topSubMenu;
+
+    static final long START_TIME = 2209161600L;
 
     class JsInterface {
 
@@ -158,6 +162,11 @@ public class TrackView extends WebViewActivity {
         }
 
         @JavascriptInterface
+        public void screenshot(double min_lat, double max_lat, double min_lon, double max_lon, double lat, double lon) {
+            takeScreenshot(min_lat, max_lat, min_lon, max_lon, lat, lon);
+        }
+
+        @JavascriptInterface
         public String kmh() {
             return getString(R.string.kmh);
         }
@@ -272,6 +281,10 @@ public class TrackView extends WebViewActivity {
                 webView.loadUrl(getURL());
                 break;
             }
+            case R.id.shot: {
+                webView.loadUrl("javascript:screenshot()");
+                break;
+            }
         }
         return false;
     }
@@ -299,54 +312,95 @@ public class TrackView extends WebViewActivity {
             Date d1 = new Date(begin);
             Date d2 = new Date(end);
 
-            String name = format(d1, "dd.MM.yy_HH.mm-") + format(d2, "HH.mm") + ".gpx";
-            File out = new File(path, name);
-            out.createNewFile();
+            File out;
 
-            FileOutputStream f = new FileOutputStream(out);
-            OutputStreamWriter ow = new OutputStreamWriter(f);
-            BufferedWriter writer = new BufferedWriter(ow);
+            String save_format = preferences.getString(Names.SAVE_FORMAT, "GPX");
+            if (save_format.equals("PLT")) {
 
-            writer.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
-            writer.append("<gpx\n");
-            writer.append(" version=\"1.0\"\n");
-            writer.append(" creator=\"ExpertGPS 1.1 - http://www.topografix.com\"\n");
-            writer.append(" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\n");
-            writer.append(" xmlns=\"http://www.topografix.com/GPX/1/0\"\n");
-            writer.append(" xsi:schemaLocation=\"http://www.topografix.com/GPX/1/0 http://www.topografix.com/GPX/1/0/gpx.xsd\">\n");
-            writer.append("<time>");
-            Date now = new Date();
-            writer.append(format(now, "yyyy-MM-dd") + "T" + format(now, "HH:mm:ss") + "Z");
-            writer.append("</time>\n");
-            writer.append("<trk>\n");
+                String name = format(d1, "dd.MM.yy_HH.mm-") + format(d2, "HH.mm") + ".plt";
+                out = new File(path, name);
+                out.createNewFile();
 
-            boolean trk = false;
-            for (Tracks.Track track : tracks) {
-                for (Tracks.Point point : track.points) {
-                    if ((point.lat < min_lat) || (point.lat > max_lat) || (point.lng < min_lon) || (point.lng > max_lon)) {
-                        if (trk) {
-                            trk = false;
-                            writer.append("</trkseg>\n");
+                FileOutputStream f = new FileOutputStream(out);
+                OutputStreamWriter ow = new OutputStreamWriter(f);
+                BufferedWriter writer = new BufferedWriter(ow);
+
+                writer.append("OziExplorer Track Point File Version 2.1\n");
+                writer.append("WGS 84\n");
+                writer.append("Altitude is in Feet\n");
+                writer.append("Reserved 3\n");
+                writer.append("0,2,255,");
+                writer.append(name);
+                writer.append(",0,0,0,255\n");
+                writer.append("0\n");
+
+                for (Tracks.Track track : tracks) {
+                    for (Tracks.Point point : track.points) {
+                        if ((point.lat < min_lat) || (point.lat > max_lat) || (point.lng < min_lon) || (point.lng > max_lon))
+                            continue;
+                        writer.append(point.lat + "," + point.lng + ",0," + (int) point.altitude + ",");
+                        Date d = new Date(point.time);
+                        long time = (d.getTime() / 1000) + START_TIME;
+                        double t = time / 86400.;
+                        writer.append(String.format("%.7f", t));
+                        writer.append(",");
+                        LocalDateTime ld = new LocalDateTime(d);
+                        writer.append(ld.toString("yyyy-MM-dd,HH-mm-ss"));
+                        writer.append("\n");
+                    }
+                }
+                writer.close();
+            } else {
+
+                String name = format(d1, "dd.MM.yy_HH.mm-") + format(d2, "HH.mm") + ".gpx";
+                out = new File(path, name);
+                out.createNewFile();
+
+                FileOutputStream f = new FileOutputStream(out);
+                OutputStreamWriter ow = new OutputStreamWriter(f);
+                BufferedWriter writer = new BufferedWriter(ow);
+
+                writer.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
+                writer.append("<gpx\n");
+                writer.append(" version=\"1.0\"\n");
+                writer.append(" creator=\"ExpertGPS 1.1 - http://www.topografix.com\"\n");
+                writer.append(" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\n");
+                writer.append(" xmlns=\"http://www.topografix.com/GPX/1/0\"\n");
+                writer.append(" xsi:schemaLocation=\"http://www.topografix.com/GPX/1/0 http://www.topografix.com/GPX/1/0/gpx.xsd\">\n");
+                writer.append("<time>");
+                Date now = new Date();
+                writer.append(format(now, "yyyy-MM-dd") + "T" + format(now, "HH:mm:ss") + "Z");
+                writer.append("</time>\n");
+                writer.append("<trk>\n");
+
+                boolean trk = false;
+                for (Tracks.Track track : tracks) {
+                    for (Tracks.Point point : track.points) {
+                        if ((point.lat < min_lat) || (point.lat > max_lat) || (point.lng < min_lon) || (point.lng > max_lon)) {
+                            if (trk) {
+                                trk = false;
+                                writer.append("</trkseg>\n");
+                            }
+                            continue;
                         }
-                        continue;
+                        if (!trk) {
+                            trk = true;
+                            writer.append("<trkseg>\n");
+                        }
+                        writer.append("<trkpt lat=\"" + point.lat + "\" lon=\"" + point.lng + "\">\n");
+                        Date t = new Date(point.time);
+                        writer.append("<time>" + format(t, "yyyy-MM-dd") + "T" + format(t, "HH:mm:ss") + "Z</time>\n");
+                        writer.append("</trkpt>\n");
                     }
-                    if (!trk) {
-                        trk = true;
-                        writer.append("<trkseg>\n");
+                    if (trk) {
+                        trk = false;
+                        writer.append("</trkseg>");
                     }
-                    writer.append("<trkpt lat=\"" + point.lat + "\" lon=\"" + point.lng + "\">\n");
-                    Date t = new Date(point.time);
-                    writer.append("<time>" + format(t, "yyyy-MM-dd") + "T" + format(t, "HH:mm:ss") + "Z</time>\n");
-                    writer.append("</trkpt>\n");
                 }
-                if (trk) {
-                    trk = false;
-                    writer.append("</trkseg>");
-                }
+                writer.append("</trk>\n");
+                writer.append("</gpx>");
+                writer.close();
             }
-            writer.append("</trk>\n");
-            writer.append("</gpx>");
-            writer.close();
             if (show_toast) {
                 Toast toast = Toast.makeText(this, getString(R.string.saved) + " " + out.toString(), Toast.LENGTH_LONG);
                 toast.show();
@@ -368,6 +422,44 @@ public class TrackView extends WebViewActivity {
         shareIntent.putExtra(Intent.EXTRA_STREAM, Uri.fromFile(out));
         shareIntent.setType("application/gpx+xml");
         startActivity(Intent.createChooser(shareIntent, getResources().getText(R.string.share)));
+    }
+
+    void takeScreenshot(double min_lat, double max_lat, double min_lon, double max_lon, double lat, double lon) {
+        try {
+            File path = Environment.getExternalStorageDirectory();
+            if (path == null)
+                path = getFilesDir();
+            path = new File(path, "Tracks");
+            path.mkdirs();
+            long time = 0;
+            if (tracks != null) {
+                for (Tracks.Track track : tracks) {
+                    for (Tracks.Point point : track.points) {
+                        if ((point.lat >= min_lat) && (point.lat <= max_lat) && (point.lng >= min_lon) && (point.lng <= max_lon)) {
+                            time = point.time;
+                            break;
+                        }
+                    }
+                    if (time > 0)
+                        break;
+                }
+            }
+            if (time == 0)
+                time = (new Date()).getTime();
+            Date t = new Date(time);
+            String name = format(t, "yyyy.MM.dd_HH.mm.ss") + ".png";
+            Bitmap bitmap = webView.getScreenshot();
+            path = new File(path, name);
+            path.createNewFile();
+            OutputStream stream = new FileOutputStream(path);
+            bitmap.compress(Bitmap.CompressFormat.PNG, 80, stream);
+            stream.close();
+            Toast toast = Toast.makeText(this, getString(R.string.saved) + " " + path.toString(), Toast.LENGTH_LONG);
+            toast.show();
+        } catch (Exception ex) {
+            Toast toast = Toast.makeText(this, ex.getMessage(), Toast.LENGTH_LONG);
+            toast.show();
+        }
     }
 
     String format(Date d, String format) {

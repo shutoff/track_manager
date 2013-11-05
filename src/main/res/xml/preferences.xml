@@ -3,6 +3,13 @@
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     android:key="root">
 
+    <ListPreference
+        android:key="save_format"
+        android:title="@string/save_format"
+        android:defaultValue="GPX"
+        android:entries="@array/save_formats"
+        android:entryValues="@array/save_formats" />
+
     <Preference
         android:key="donate"
         android:title="@string/beer" />

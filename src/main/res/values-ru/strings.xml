@@ -23,4 +23,6 @@
     <string name="remove_warn">Этот трек содержит слишком мало точек с правильной позицией GPS\nУдалить его?</string>
     <string name="files">Файлы</string>
     <string name="beer">Разработчику на пиво</string>
+    <string name="save_format">Формат сохранения треков</string>
+    <string name="shot">Снимок экрана</string>
 </resources>
