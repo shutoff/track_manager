@@ -1,6 +1,5 @@
 package ru.shutoff.track_manager;
 
-import android.util.Log;
 import android.util.Xml;
 
 import org.xmlpull.v1.XmlPullParser;
@@ -171,7 +170,6 @@ public class Tracks {
                     if (prev_time > 0) {
                         long time_delta = (time - prev_time) / 1000;
                         if (Math.abs(time_delta) > 60) {
-                            Log.v("v", n_line + ": delta=" + time_delta);
                             long correction = 0;
                             while (time_delta < 0) {
                                 time_delta += 3600;
@@ -181,7 +179,6 @@ public class Tracks {
                                 correction += (time_delta / 3600) * 3600;
                                 zone_delta -= correction * 1000;
                                 time -= correction * 1000;
-                                Log.v("v", n_line + ": zone " + zone_delta);
                             }
                         }
                     }
@@ -231,10 +228,8 @@ public class Tracks {
                         t.points = new Vector<Point>();
                         for (int n = start + 1; n < i; n++) {
                             Point c = points.get(n);
-                            if (c.time < p.time) {
-                                Log.v("v", "remove " + c.time + " " + p.time);
+                            if (c.time < p.time)
                                 continue;
-                            }
                             double distance = calc_distance(p.lat, p.lng, c.lat, c.lng);
                             double speed = (distance * 3600) / (c.time - p.time);
                             if (speed < 250) {

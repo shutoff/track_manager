@@ -106,12 +106,14 @@ public class MainActivity extends ActionBarActivity {
             public void onSelectDate(Date date, View view) {
                 Intent intent = new Intent(MainActivity.this, TracksActivity.class);
                 LocalDateTime d = new LocalDateTime(date);
-                intent.putExtra(Names.TITLE, d.toString("dd MMMM"));
+                intent.putExtra(Names.TITLE, d.toString("d MMMM"));
                 File file = Environment.getExternalStorageDirectory();
                 file = new File(file, Tracks.TRACK_FOLDER);
                 file = new File(file, String.format("%04d_%02d_%02d_gps.plt", d.getYear(), d.getMonthOfYear(), d.getDayOfMonth()));
                 intent.putExtra(Names.PATH, file.getAbsolutePath());
                 startActivity(intent);
+                current = date;
+                caldroidFragment.setSelectedDates(current, current);
             }
 
             @Override
@@ -153,6 +155,13 @@ public class MainActivity extends ActionBarActivity {
         });
 
         setMode();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (caldroidFragment != null)
+            caldroidFragment.refreshView();
     }
 
     @Override

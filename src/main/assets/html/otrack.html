@@ -58,7 +58,7 @@ function initialize() {
         if (lon > max_lon)
             max_lon = lon;
         if (p.length == 4){
-            var speed = parseFloat(p[2]);
+            var speed = Math.round(parseFloat(p[2]));
             for (var index = 0; index < colors.length - 1; index++){
                 if (colors[index][0] >= speed)
                     break;
@@ -196,6 +196,7 @@ function shareTrack() {
     var sw = bounds.getSouthWest();
     android.share(sw.lat, ne.lat, sw.lng, ne.lng);
 }
+
 
 
 
