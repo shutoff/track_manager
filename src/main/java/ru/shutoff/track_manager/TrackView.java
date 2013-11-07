@@ -342,7 +342,7 @@ public class TrackView extends WebViewActivity {
                         Date d = new Date(point.time);
                         long time = (d.getTime() / 1000) + START_TIME;
                         double t = time / 86400.;
-                        writer.append(String.format("%.7f", t));
+                        writer.append(String.format("%.7f", t).replaceAll(",", "."));
                         writer.append(",");
                         LocalDateTime ld = new LocalDateTime(d);
                         writer.append(ld.toString("yyyy-MM-dd,HH-mm-ss"));
@@ -447,7 +447,9 @@ public class TrackView extends WebViewActivity {
             if (time == 0)
                 time = (new Date()).getTime();
             Date t = new Date(time);
-            String name = format(t, "yyyy.MM.dd_HH.mm.ss") + ".png";
+            lat = Math.abs(lat);
+            lon = Math.abs(lon);
+            String name = format(t, "yyyy.MM.dd_HH.mm.ss") + String.format("_%.5f_%.5f", lat, lon).replaceAll(",", ".") + ".png";
             Bitmap bitmap = webView.getScreenshot();
             path = new File(path, name);
             path.createNewFile();

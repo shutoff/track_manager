@@ -147,12 +147,10 @@ public class Tracks {
             long prev_time = 0;
             long zone_delta = 0;
             Vector<Point> points = new Vector<Point>();
-            int n_line = 0;
             for (; ; ) {
                 line = reader.readLine();
                 if (line == null)
                     break;
-                n_line++;
                 String[] parts = line.split(",");
                 try {
                     double lat = Double.parseDouble(parts[0]);
@@ -176,7 +174,7 @@ public class Tracks {
                                 time_delta += 3600;
                                 correction -= 3600;
                             }
-                            if ((time_delta % 3600) < 15) {
+                            if ((time_delta % 3600) < 40) {
                                 correction += (time_delta / 3600) * 3600;
                                 zone_delta -= correction * 1000;
                                 time -= correction * 1000;
@@ -297,10 +295,10 @@ public class Tracks {
 
     static class Kalman1D {
 
-        double Q;
-        double R;
-        double F;
-        double H;
+        final double Q;
+        final double R;
+        final double F;
+        final double H;
 
         double State;
         double Covariance;

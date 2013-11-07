@@ -76,6 +76,10 @@ public class MainActivity extends ActionBarActivity {
         preferences = PreferenceManager.getDefaultSharedPreferences(this);
         mode = preferences.getBoolean(Names.MODE, false);
         path = Environment.getExternalStorageDirectory();
+        path = new File(preferences.getString(Names.PATH, path.getAbsolutePath()));
+        if (!path.exists())
+            path = Environment.getExternalStorageDirectory();
+
         current = new Date();
 
         caldroidFragment = new CaldroidFragment();
@@ -311,6 +315,9 @@ public class MainActivity extends ActionBarActivity {
                     list.setAdapter(new FilesAdapter());
                     list.setVisibility(View.VISIBLE);
                     findViewById(R.id.progress).setVisibility(View.GONE);
+                    SharedPreferences.Editor ed = preferences.edit();
+                    ed.putString(Names.PATH, path.getAbsolutePath());
+                    ed.commit();
                 }
             }
         };

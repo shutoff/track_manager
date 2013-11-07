@@ -114,6 +114,25 @@ public class TracksActivity extends ActionBarActivity {
         });
 
         setTitle(getIntent().getStringExtra(Names.TITLE));
+
+        tracks = (Vector<Tracks.Track>) getLastCustomNonConfigurationInstance();
+        if (tracks != null) {
+            if (tracks.size() == 0) {
+                tracksDone();
+                return;
+            }
+            double mileage = 0;
+            long time = 0;
+            for (Tracks.Track track : tracks) {
+                mileage += track.mileage;
+                time += track.getTime();
+            }
+            tvStatus.setText(String.format(getString(R.string.status), mileage / 1000, timeFormat((int) (time / 60)), mileage * 3.6 / time));
+            tvStatus.setVisibility(View.VISIBLE);
+            allDone();
+            return;
+        }
+
         AsyncTask<String, Void, Void> task = new AsyncTask<String, Void, Void>() {
             @Override
             protected Void doInBackground(String... params) {
@@ -139,6 +158,13 @@ public class TracksActivity extends ActionBarActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
+    }
+
+    @Override
+    public Object onRetainCustomNonConfigurationInstance() {
+        if (loaded)
+            return tracks;
+        return null;
     }
 
     @Override

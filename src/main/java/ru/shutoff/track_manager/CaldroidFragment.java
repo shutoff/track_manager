@@ -721,7 +721,7 @@ public class CaldroidFragment extends DialogFragment {
     static String monthYear(int year, int month) {
         String s = new DateTime(year, month, 1, 0, 0, 0, 0)
                 .monthOfYear().getAsText().toUpperCase();
-        s = s.replaceAll("\u042F$", "\u042C").replaceAll("\u0410$", "");
+        s = s.replaceAll("\u0410\u042F$", "\u0410\u0419").replaceAll("\u042F$", "\u042C").replaceAll("\u0410$", "");
         return s + " " + year;
     }
 
