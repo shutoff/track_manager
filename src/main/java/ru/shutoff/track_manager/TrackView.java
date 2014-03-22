@@ -34,11 +34,337 @@ import java.util.Vector;
 
 public class TrackView extends WebViewActivity {
 
+    static final long START_TIME = 2209161600L;
     SharedPreferences preferences;
     Vector<Tracks.Track> tracks;
     Menu topSubMenu;
+    boolean have_speed;
 
-    static final long START_TIME = 2209161600L;
+    @Override
+    String loadURL() {
+        try {
+            byte[] track_data = null;
+            String file_name = getIntent().getStringExtra(Names.TRACK_FILE);
+            if (file_name != null) {
+                File file = new File(file_name);
+                FileInputStream in = new FileInputStream(file);
+                track_data = new byte[(int) file.length()];
+                in.read(track_data);
+                in.close();
+                file.delete();
+            } else {
+                track_data = getIntent().getByteArrayExtra(Names.TRACK);
+            }
+            ByteArrayInputStream bis = new ByteArrayInputStream(track_data);
+            ObjectInput in = new ObjectInputStream(bis);
+            tracks = (Vector<Tracks.Track>) in.readObject();
+            in.close();
+            bis.close();
+        } catch (Exception ex) {
+            finish();
+        }
+        webView.addJavascriptInterface(new JsInterface(), "android");
+        return getURL();
+    }
+
+    String getURL() {
+        if (preferences.getString("map_type", "").equals("OSM"))
+            return "file:///android_asset/html/otrack.html";
+        if (preferences.getString("map_type", "").equals("Yandex"))
+            return "file:///android_asset/html/ytrack.html";
+        return "file:///android_asset/html/track.html";
+    }
+
+    @Override
+    public void onCreate(Bundle savedInstanceState) {
+        try {
+            ViewConfiguration config = ViewConfiguration.get(this);
+            Field menuKeyField = ViewConfiguration.class.getDeclaredField("sHasPermanentMenuKey");
+            if (menuKeyField != null) {
+                menuKeyField.setAccessible(true);
+                menuKeyField.setBoolean(config, false);
+            }
+        } catch (Exception ex) {
+            // Ignore
+        }
+        preferences = PreferenceManager.getDefaultSharedPreferences(this);
+        have_speed = getIntent().getBooleanExtra(Names.TRAFFIC, false);
+        super.onCreate(savedInstanceState);
+        setTitle(getIntent().getStringExtra(Names.TITLE));
+    }
+
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        topSubMenu = menu;
+        MenuInflater inflater = getMenuInflater();
+        inflater.inflate(R.menu.track, menu);
+        if (have_speed) {
+            menu.findItem(R.id.traffic).setTitle(getCheckedText(R.string.traffic, preferences.getBoolean(Names.TRAFFIC, true)));
+        } else {
+            menu.removeItem(R.id.traffic);
+        }
+        boolean isOSM = preferences.getString("map_type", "").equals("OSM");
+        boolean isYandex = preferences.getString("map_type", "").equals("Yandex");
+        menu.findItem(R.id.google).setTitle(getCheckedText(R.string.google, !isOSM && !isYandex));
+        menu.findItem(R.id.osm).setTitle(getCheckedText(R.string.osm, isOSM));
+        menu.findItem(R.id.yandex).setTitle(getCheckedText(R.string.yandex, isYandex));
+        return super.onCreateOptionsMenu(menu);
+    }
+
+    String getCheckedText(int id, boolean check) {
+        String check_mark = check ? "\u2714" : "";
+        return check_mark + getString(id);
+    }
+
+    void updateMenu() {
+        topSubMenu.clear();
+        onCreateOptionsMenu(topSubMenu);
+    }
+
+    public boolean onOptionsItemSelected(MenuItem item) {
+        switch (item.getItemId()) {
+            case R.id.save:
+                webView.loadUrl("javascript:saveTrack()");
+                break;
+            case R.id.share:
+                webView.loadUrl("javascript:shareTrack()");
+                break;
+            case R.id.traffic: {
+                SharedPreferences.Editor ed = preferences.edit();
+                ed.putBoolean(Names.TRAFFIC, !preferences.getBoolean(Names.TRAFFIC, true));
+                ed.commit();
+                updateMenu();
+                webView.loadUrl(getURL());
+                break;
+            }
+            case R.id.google: {
+                SharedPreferences.Editor ed = preferences.edit();
+                ed.putString(Names.MAP_TYPE, "Google");
+                ed.commit();
+                updateMenu();
+                webView.loadUrl(getURL());
+                break;
+            }
+            case R.id.osm: {
+                SharedPreferences.Editor ed = preferences.edit();
+                ed.putString(Names.MAP_TYPE, "OSM");
+                ed.commit();
+                updateMenu();
+                webView.loadUrl(getURL());
+                break;
+            }
+            case R.id.yandex: {
+                SharedPreferences.Editor ed = preferences.edit();
+                ed.putString(Names.MAP_TYPE, "Yandex");
+                ed.commit();
+                updateMenu();
+                webView.loadUrl(getURL());
+                break;
+            }
+            case R.id.shot: {
+                webView.loadUrl("javascript:screenshot()");
+                break;
+            }
+        }
+        return false;
+    }
+
+    File saveTrack(double min_lat, double max_lat, double min_lon, double max_lon, boolean show_toast) {
+        try {
+            File path = Environment.getExternalStorageDirectory();
+            if (path == null)
+                path = getFilesDir();
+            path = new File(path, "Tracks");
+            path.mkdirs();
+
+            long begin = 0;
+            long end = 0;
+            for (Tracks.Track track : tracks) {
+                for (Tracks.Point point : track.points) {
+                    if ((point.lat < min_lat) || (point.lat > max_lat) || (point.lng < min_lon) || (point.lng > max_lon))
+                        continue;
+                    if (begin == 0)
+                        begin = point.time;
+                    end = point.time;
+                }
+            }
+
+            String name = getTitle().toString();
+            if (begin != 0) {
+                Date d1 = new Date(begin);
+                Date d2 = new Date(end);
+                name = format(d1, "dd.MM.yy_HH.mm-") + format(d2, "HH.mm");
+            }
+
+            File out;
+            String save_format = preferences.getString(Names.SAVE_FORMAT, "GPX");
+            String ext = save_format.equals("PLT") ? ".plt" : ".gpx";
+            out = new File(path, name + ext);
+            if (out.exists()) {
+                for (int i = 1; i < 100; i++) {
+                    out = new File(path, name + "_" + i + ext);
+                    if (!out.exists())
+                        break;
+                }
+            }
+            out.createNewFile();
+
+            if (save_format.equals("PLT")) {
+
+                FileOutputStream f = new FileOutputStream(out);
+                OutputStreamWriter ow = new OutputStreamWriter(f);
+                BufferedWriter writer = new BufferedWriter(ow);
+
+                writer.append("OziExplorer Track Point File Version 2.1\n");
+                writer.append("WGS 84\n");
+                writer.append("Altitude is in Feet\n");
+                writer.append("Reserved 3\n");
+                writer.append("0,2,255,");
+                writer.append(name);
+                writer.append(",0,0,0,255\n");
+                writer.append("0\n");
+
+                for (Tracks.Track track : tracks) {
+                    for (Tracks.Point point : track.points) {
+                        if ((point.lat < min_lat) || (point.lat > max_lat) || (point.lng < min_lon) || (point.lng > max_lon))
+                            continue;
+                        writer.append(point.lat + "," + point.lng + ",0," + (int) point.altitude + ",");
+                        Date d = new Date(point.time);
+                        long time = (d.getTime() / 1000) + START_TIME;
+                        double t = time / 86400.;
+                        writer.append(String.format("%.7f", t).replaceAll(",", "."));
+                        writer.append(",");
+                        LocalDateTime ld = new LocalDateTime(d);
+                        writer.append(ld.toString("yyyy-MM-dd,HH-mm-ss"));
+                        writer.append("\n");
+                    }
+                }
+                writer.close();
+            } else {
+
+                FileOutputStream f = new FileOutputStream(out);
+                OutputStreamWriter ow = new OutputStreamWriter(f);
+                BufferedWriter writer = new BufferedWriter(ow);
+
+                writer.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
+                writer.append("<gpx\n");
+                writer.append(" version=\"1.0\"\n");
+                writer.append(" creator=\"ExpertGPS 1.1 - http://www.topografix.com\"\n");
+                writer.append(" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\n");
+                writer.append(" xmlns=\"http://www.topografix.com/GPX/1/0\"\n");
+                writer.append(" xsi:schemaLocation=\"http://www.topografix.com/GPX/1/0 http://www.topografix.com/GPX/1/0/gpx.xsd\">\n");
+                writer.append("<time>");
+                Date now = new Date();
+                writer.append(format(now, "yyyy-MM-dd") + "T" + format(now, "HH:mm:ss") + "Z");
+                writer.append("</time>\n");
+                writer.append("<trk>\n");
+
+                boolean trk = false;
+                for (Tracks.Track track : tracks) {
+                    for (Tracks.Point point : track.points) {
+                        if ((point.lat < min_lat) || (point.lat > max_lat) || (point.lng < min_lon) || (point.lng > max_lon)) {
+                            if (trk) {
+                                trk = false;
+                                writer.append("</trkseg>\n");
+                            }
+                            continue;
+                        }
+                        if (!trk) {
+                            trk = true;
+                            writer.append("<trkseg>\n");
+                        }
+                        writer.append("<trkpt lat=\"" + point.lat + "\" lon=\"" + point.lng + "\">\n");
+                        Date t = new Date(point.time);
+                        writer.append("<time>" + format(t, "yyyy-MM-dd") + "T" + format(t, "HH:mm:ss") + "Z</time>\n");
+                        writer.append("</trkpt>\n");
+                    }
+                    if (trk) {
+                        trk = false;
+                        writer.append("</trkseg>");
+                    }
+                }
+                writer.append("</trk>\n");
+                writer.append("</gpx>");
+                writer.close();
+            }
+            if (show_toast) {
+                Toast toast = Toast.makeText(this, getString(R.string.saved) + " " + out.toString(), Toast.LENGTH_LONG);
+                toast.show();
+            }
+            return out;
+        } catch (Exception ex) {
+            Toast toast = Toast.makeText(this, ex.getMessage(), Toast.LENGTH_LONG);
+            toast.show();
+        }
+        return null;
+    }
+
+    void shareTrack(double min_lat, double max_lat, double min_lon, double max_lon) {
+        File out = saveTrack(min_lat, max_lat, min_lon, max_lon, false);
+        if (out == null)
+            return;
+        Intent shareIntent = new Intent();
+        shareIntent.setAction(Intent.ACTION_SEND);
+        shareIntent.putExtra(Intent.EXTRA_STREAM, Uri.fromFile(out));
+        shareIntent.setType("application/gpx+xml");
+        startActivity(Intent.createChooser(shareIntent, getResources().getText(R.string.share)));
+    }
+
+    void takeScreenshot(double min_lat, double max_lat, double min_lon, double max_lon, double lat, double lon) {
+        try {
+            File path = Environment.getExternalStorageDirectory();
+            if (path == null)
+                path = getFilesDir();
+            path = new File(path, "Tracks");
+            path.mkdirs();
+            long time = 0;
+            if (tracks != null) {
+                for (Tracks.Track track : tracks) {
+                    for (Tracks.Point point : track.points) {
+                        if ((point.lat >= min_lat) && (point.lat <= max_lat) && (point.lng >= min_lon) && (point.lng <= max_lon)) {
+                            time = point.time;
+                            break;
+                        }
+                    }
+                    if (time > 0)
+                        break;
+                }
+            }
+            if (time == 0)
+                time = (new Date()).getTime();
+            Date t = new Date(time);
+            lat = Math.abs(lat);
+            lon = Math.abs(lon);
+            String name = format(t, "yyyy.MM.dd_HH.mm.ss") + String.format("_%.5f_%.5f", lat, lon).replaceAll(",", ".") + ".png";
+            Bitmap bitmap = webView.getScreenshot();
+            path = new File(path, name);
+            path.createNewFile();
+            OutputStream stream = new FileOutputStream(path);
+            bitmap.compress(Bitmap.CompressFormat.PNG, 80, stream);
+            stream.close();
+            Toast toast = Toast.makeText(this, getString(R.string.saved) + " " + path.toString(), Toast.LENGTH_LONG);
+            toast.show();
+        } catch (Exception ex) {
+            Toast toast = Toast.makeText(this, ex.getMessage(), Toast.LENGTH_LONG);
+            toast.show();
+        }
+    }
+
+    String format(Date d, String format) {
+        return new SimpleDateFormat(format).format(d);
+    }
+
+    static class TimeInterval {
+        long begin;
+        long end;
+    }
+
+    static class Marker {
+        double latitude;
+        double longitude;
+        String address;
+        Vector<TimeInterval> times;
+    }
 
     class JsInterface {
 
@@ -173,311 +499,8 @@ public class TrackView extends WebViewActivity {
 
         @JavascriptInterface
         public String traffic() {
-            return preferences.getBoolean(Names.TRAFFIC, true) ? "1" : "";
+            return have_speed && preferences.getBoolean(Names.TRAFFIC, true) ? "1" : "";
         }
-    }
-
-    @Override
-    String loadURL() {
-        try {
-            byte[] track_data = null;
-            String file_name = getIntent().getStringExtra(Names.TRACK_FILE);
-            if (file_name != null) {
-                File file = new File(file_name);
-                FileInputStream in = new FileInputStream(file);
-                track_data = new byte[(int) file.length()];
-                in.read(track_data);
-                in.close();
-                file.delete();
-            } else {
-                track_data = getIntent().getByteArrayExtra(Names.TRACK);
-            }
-            ByteArrayInputStream bis = new ByteArrayInputStream(track_data);
-            ObjectInput in = new ObjectInputStream(bis);
-            tracks = (Vector<Tracks.Track>) in.readObject();
-            in.close();
-            bis.close();
-        } catch (Exception ex) {
-            finish();
-        }
-        webView.addJavascriptInterface(new JsInterface(), "android");
-        return getURL();
-    }
-
-    String getURL() {
-        if (preferences.getString("map_type", "").equals("OSM"))
-            return "file:///android_asset/html/otrack.html";
-        return "file:///android_asset/html/track.html";
-    }
-
-    @Override
-    public void onCreate(Bundle savedInstanceState) {
-        try {
-            ViewConfiguration config = ViewConfiguration.get(this);
-            Field menuKeyField = ViewConfiguration.class.getDeclaredField("sHasPermanentMenuKey");
-            if (menuKeyField != null) {
-                menuKeyField.setAccessible(true);
-                menuKeyField.setBoolean(config, false);
-            }
-        } catch (Exception ex) {
-            // Ignore
-        }
-        preferences = PreferenceManager.getDefaultSharedPreferences(this);
-        super.onCreate(savedInstanceState);
-        setTitle(getIntent().getStringExtra(Names.TITLE));
-    }
-
-    @Override
-    public boolean onCreateOptionsMenu(Menu menu) {
-        topSubMenu = menu;
-        MenuInflater inflater = getMenuInflater();
-        inflater.inflate(R.menu.track, menu);
-        menu.findItem(R.id.traffic).setTitle(getCheckedText(R.string.traffic, preferences.getBoolean(Names.TRAFFIC, true)));
-        boolean isOSM = preferences.getString("map_type", "").equals("OSM");
-        menu.findItem(R.id.google).setTitle(getCheckedText(R.string.google, !isOSM));
-        menu.findItem(R.id.osm).setTitle(getCheckedText(R.string.osm, isOSM));
-        return super.onCreateOptionsMenu(menu);
-    }
-
-    String getCheckedText(int id, boolean check) {
-        String check_mark = check ? "\u2714" : "";
-        return check_mark + getString(id);
-    }
-
-    void updateMenu() {
-        topSubMenu.clear();
-        onCreateOptionsMenu(topSubMenu);
-    }
-
-    public boolean onOptionsItemSelected(MenuItem item) {
-        switch (item.getItemId()) {
-            case R.id.save:
-                webView.loadUrl("javascript:saveTrack()");
-                break;
-            case R.id.share:
-                webView.loadUrl("javascript:shareTrack()");
-                break;
-            case R.id.traffic: {
-                SharedPreferences.Editor ed = preferences.edit();
-                ed.putBoolean(Names.TRAFFIC, !preferences.getBoolean(Names.TRAFFIC, true));
-                ed.commit();
-                updateMenu();
-                webView.loadUrl(getURL());
-                break;
-            }
-            case R.id.google: {
-                SharedPreferences.Editor ed = preferences.edit();
-                ed.putString(Names.MAP_TYPE, "Google");
-                ed.commit();
-                updateMenu();
-                webView.loadUrl(getURL());
-                break;
-            }
-            case R.id.osm: {
-                SharedPreferences.Editor ed = preferences.edit();
-                ed.putString(Names.MAP_TYPE, "OSM");
-                ed.commit();
-                updateMenu();
-                webView.loadUrl(getURL());
-                break;
-            }
-            case R.id.shot: {
-                webView.loadUrl("javascript:screenshot()");
-                break;
-            }
-        }
-        return false;
-    }
-
-    File saveTrack(double min_lat, double max_lat, double min_lon, double max_lon, boolean show_toast) {
-        try {
-            File path = Environment.getExternalStorageDirectory();
-            if (path == null)
-                path = getFilesDir();
-            path = new File(path, "Tracks");
-            path.mkdirs();
-
-            long begin = 0;
-            long end = 0;
-            for (Tracks.Track track : tracks) {
-                for (Tracks.Point point : track.points) {
-                    if ((point.lat < min_lat) || (point.lat > max_lat) || (point.lng < min_lon) || (point.lng > max_lon))
-                        continue;
-                    if (begin == 0)
-                        begin = point.time;
-                    end = point.time;
-                }
-            }
-
-            Date d1 = new Date(begin);
-            Date d2 = new Date(end);
-
-            File out;
-
-            String save_format = preferences.getString(Names.SAVE_FORMAT, "GPX");
-            if (save_format.equals("PLT")) {
-
-                String name = format(d1, "dd.MM.yy_HH.mm-") + format(d2, "HH.mm") + ".plt";
-                out = new File(path, name);
-                out.createNewFile();
-
-                FileOutputStream f = new FileOutputStream(out);
-                OutputStreamWriter ow = new OutputStreamWriter(f);
-                BufferedWriter writer = new BufferedWriter(ow);
-
-                writer.append("OziExplorer Track Point File Version 2.1\n");
-                writer.append("WGS 84\n");
-                writer.append("Altitude is in Feet\n");
-                writer.append("Reserved 3\n");
-                writer.append("0,2,255,");
-                writer.append(name);
-                writer.append(",0,0,0,255\n");
-                writer.append("0\n");
-
-                for (Tracks.Track track : tracks) {
-                    for (Tracks.Point point : track.points) {
-                        if ((point.lat < min_lat) || (point.lat > max_lat) || (point.lng < min_lon) || (point.lng > max_lon))
-                            continue;
-                        writer.append(point.lat + "," + point.lng + ",0," + (int) point.altitude + ",");
-                        Date d = new Date(point.time);
-                        long time = (d.getTime() / 1000) + START_TIME;
-                        double t = time / 86400.;
-                        writer.append(String.format("%.7f", t).replaceAll(",", "."));
-                        writer.append(",");
-                        LocalDateTime ld = new LocalDateTime(d);
-                        writer.append(ld.toString("yyyy-MM-dd,HH-mm-ss"));
-                        writer.append("\n");
-                    }
-                }
-                writer.close();
-            } else {
-
-                String name = format(d1, "dd.MM.yy_HH.mm-") + format(d2, "HH.mm") + ".gpx";
-                out = new File(path, name);
-                out.createNewFile();
-
-                FileOutputStream f = new FileOutputStream(out);
-                OutputStreamWriter ow = new OutputStreamWriter(f);
-                BufferedWriter writer = new BufferedWriter(ow);
-
-                writer.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
-                writer.append("<gpx\n");
-                writer.append(" version=\"1.0\"\n");
-                writer.append(" creator=\"ExpertGPS 1.1 - http://www.topografix.com\"\n");
-                writer.append(" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\n");
-                writer.append(" xmlns=\"http://www.topografix.com/GPX/1/0\"\n");
-                writer.append(" xsi:schemaLocation=\"http://www.topografix.com/GPX/1/0 http://www.topografix.com/GPX/1/0/gpx.xsd\">\n");
-                writer.append("<time>");
-                Date now = new Date();
-                writer.append(format(now, "yyyy-MM-dd") + "T" + format(now, "HH:mm:ss") + "Z");
-                writer.append("</time>\n");
-                writer.append("<trk>\n");
-
-                boolean trk = false;
-                for (Tracks.Track track : tracks) {
-                    for (Tracks.Point point : track.points) {
-                        if ((point.lat < min_lat) || (point.lat > max_lat) || (point.lng < min_lon) || (point.lng > max_lon)) {
-                            if (trk) {
-                                trk = false;
-                                writer.append("</trkseg>\n");
-                            }
-                            continue;
-                        }
-                        if (!trk) {
-                            trk = true;
-                            writer.append("<trkseg>\n");
-                        }
-                        writer.append("<trkpt lat=\"" + point.lat + "\" lon=\"" + point.lng + "\">\n");
-                        Date t = new Date(point.time);
-                        writer.append("<time>" + format(t, "yyyy-MM-dd") + "T" + format(t, "HH:mm:ss") + "Z</time>\n");
-                        writer.append("</trkpt>\n");
-                    }
-                    if (trk) {
-                        trk = false;
-                        writer.append("</trkseg>");
-                    }
-                }
-                writer.append("</trk>\n");
-                writer.append("</gpx>");
-                writer.close();
-            }
-            if (show_toast) {
-                Toast toast = Toast.makeText(this, getString(R.string.saved) + " " + out.toString(), Toast.LENGTH_LONG);
-                toast.show();
-            }
-            return out;
-        } catch (Exception ex) {
-            Toast toast = Toast.makeText(this, ex.getMessage(), Toast.LENGTH_LONG);
-            toast.show();
-        }
-        return null;
-    }
-
-    void shareTrack(double min_lat, double max_lat, double min_lon, double max_lon) {
-        File out = saveTrack(min_lat, max_lat, min_lon, max_lon, false);
-        if (out == null)
-            return;
-        Intent shareIntent = new Intent();
-        shareIntent.setAction(Intent.ACTION_SEND);
-        shareIntent.putExtra(Intent.EXTRA_STREAM, Uri.fromFile(out));
-        shareIntent.setType("application/gpx+xml");
-        startActivity(Intent.createChooser(shareIntent, getResources().getText(R.string.share)));
-    }
-
-    void takeScreenshot(double min_lat, double max_lat, double min_lon, double max_lon, double lat, double lon) {
-        try {
-            File path = Environment.getExternalStorageDirectory();
-            if (path == null)
-                path = getFilesDir();
-            path = new File(path, "Tracks");
-            path.mkdirs();
-            long time = 0;
-            if (tracks != null) {
-                for (Tracks.Track track : tracks) {
-                    for (Tracks.Point point : track.points) {
-                        if ((point.lat >= min_lat) && (point.lat <= max_lat) && (point.lng >= min_lon) && (point.lng <= max_lon)) {
-                            time = point.time;
-                            break;
-                        }
-                    }
-                    if (time > 0)
-                        break;
-                }
-            }
-            if (time == 0)
-                time = (new Date()).getTime();
-            Date t = new Date(time);
-            lat = Math.abs(lat);
-            lon = Math.abs(lon);
-            String name = format(t, "yyyy.MM.dd_HH.mm.ss") + String.format("_%.5f_%.5f", lat, lon).replaceAll(",", ".") + ".png";
-            Bitmap bitmap = webView.getScreenshot();
-            path = new File(path, name);
-            path.createNewFile();
-            OutputStream stream = new FileOutputStream(path);
-            bitmap.compress(Bitmap.CompressFormat.PNG, 80, stream);
-            stream.close();
-            Toast toast = Toast.makeText(this, getString(R.string.saved) + " " + path.toString(), Toast.LENGTH_LONG);
-            toast.show();
-        } catch (Exception ex) {
-            Toast toast = Toast.makeText(this, ex.getMessage(), Toast.LENGTH_LONG);
-            toast.show();
-        }
-    }
-
-    String format(Date d, String format) {
-        return new SimpleDateFormat(format).format(d);
-    }
-
-    static class TimeInterval {
-        long begin;
-        long end;
-    }
-
-    static class Marker {
-        double latitude;
-        double longitude;
-        String address;
-        Vector<TimeInterval> times;
     }
 
 }

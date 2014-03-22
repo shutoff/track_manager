@@ -57,6 +57,10 @@ public class TracksActivity extends ActionBarActivity {
     int progress;
     boolean loaded;
 
+    static String formatTime(Date d) {
+        return String.format("%02d:%02d", d.getHours(), d.getMinutes());
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -86,6 +90,11 @@ public class TracksActivity extends ActionBarActivity {
             public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
                 TracksAdapter adapter = (TracksAdapter) lvTracks.getAdapter();
                 if (adapter.selected == position) {
+                    showTrack(position);
+                    return;
+                }
+                Tracks.Track track = tracks.get(position);
+                if (track.points.get(0).time == 0) {
                     showTrack(position);
                     return;
                 }
@@ -138,7 +147,7 @@ public class TracksActivity extends ActionBarActivity {
             protected Void doInBackground(String... params) {
                 try {
                     track_file = new File(params[0]);
-                    tracks = Tracks.loadPlt(track_file);
+                    tracks = Tracks.loadPlt(track_file, false);
                     if (tracks == null)
                         tracks = Tracks.loadGpx(track_file);
                 } catch (Exception ex) {
@@ -204,7 +213,11 @@ public class TracksActivity extends ActionBarActivity {
             mileage += track.mileage;
             time += track.getTime();
         }
-        tvStatus.setText(String.format(getString(R.string.status), mileage / 1000, timeFormat((int) (time / 60)), mileage * 3.6 / time));
+        if (time == 0) {
+            tvStatus.setText(String.format(getString(R.string.status_notime), mileage / 1000));
+        } else {
+            tvStatus.setText(String.format(getString(R.string.status), mileage / 1000, timeFormat((int) (time / 60)), mileage * 3.6 / time));
+        }
         tvStatus.setVisibility(View.VISIBLE);
         progressBar.setMax(tracks.size() * 2 + 1);
         progress = 1;
@@ -228,6 +241,173 @@ public class TracksActivity extends ActionBarActivity {
         tvLoading.setVisibility(View.GONE);
         progressFirst.setVisibility(View.GONE);
         progressBar.setVisibility(View.GONE);
+    }
+
+    void showTrack(int index) {
+        Intent intent = new Intent(this, TrackView.class);
+        Tracks.Track track = tracks.get(index);
+        Vector<Tracks.Track> track_one = new Vector<Tracks.Track>();
+        track_one.add(track);
+        setTrack(track_one, intent);
+        if (track.points.get(0).time != 0) {
+            Date begin = new Date(track.points.get(0).time);
+            Date end = new Date(track.points.get(track.points.size() - 1).time);
+            intent.putExtra(Names.TITLE, format(begin, "d MMMM HH:mm") + "-" + format(end, "HH:mm"));
+            intent.putExtra(Names.TRAFFIC, true);
+        } else {
+            intent.putExtra(Names.TITLE, getTitle());
+        }
+        startActivity(intent);
+    }
+
+    void showDay() {
+        Intent intent = new Intent(this, TrackView.class);
+        if (!setTrack(tracks, intent))
+            finish();
+        intent.putExtra(Names.TITLE, getTitle());
+        Tracks.Track track = tracks.get(0);
+        if (track.points.get(0).time != 0)
+            intent.putExtra(Names.TRAFFIC, true);
+        startActivity(intent);
+    }
+
+    boolean setTrack(Vector<Tracks.Track> tracks, Intent intent) {
+        byte[] data = null;
+        try {
+            ByteArrayOutputStream bos = new ByteArrayOutputStream();
+            ObjectOutput out = new ObjectOutputStream(bos);
+            out.writeObject(tracks);
+            data = bos.toByteArray();
+            out.close();
+            bos.close();
+        } catch (Exception ex) {
+            // ignore
+        }
+        if (data.length > 500000) {
+            try {
+                File outputDir = getCacheDir();
+                File file = File.createTempFile("track", "dat", outputDir);
+                FileOutputStream f = new FileOutputStream(file);
+                f.write(data);
+                intent.putExtra(Names.TRACK_FILE, file.getAbsolutePath());
+                f.close();
+            } catch (Exception ex) {
+                ex.printStackTrace();
+                return false;
+            }
+        } else {
+            intent.putExtra(Names.TRACK, data);
+        }
+        return true;
+    }
+
+    String format(Date d, String format) {
+        return new SimpleDateFormat(format).format(d);
+    }
+
+    String timeFormat(int minutes) {
+        if (minutes < 60) {
+            String s = getString(R.string.m_format);
+            return String.format(s, minutes);
+        }
+        int hours = minutes / 60;
+        minutes -= hours * 60;
+        String s = getString(R.string.hm_format);
+        return String.format(s, hours, minutes);
+    }
+
+    File saveTrack(boolean show_toast) {
+        if (!loaded)
+            return null;
+        if (tracks.size() == 0)
+            return null;
+        try {
+            File path = Environment.getExternalStorageDirectory();
+            if (path == null)
+                path = getFilesDir();
+            path = new File(path, "Tracks");
+            path.mkdirs();
+
+            LocalDateTime d = new LocalDateTime(tracks.get(0).points.get(0).time);
+            String name = d.toString("dd MMMM yyyy") + ".txt";
+            File out = new File(path, name);
+            out.createNewFile();
+
+            FileOutputStream f = new FileOutputStream(out);
+            OutputStreamWriter ow = new OutputStreamWriter(f);
+            BufferedWriter writer = new BufferedWriter(ow);
+
+            if (!save(writer)) {
+                writer.close();
+                return null;
+            }
+
+
+            writer.close();
+            if (show_toast) {
+                Toast toast = Toast.makeText(this, getString(R.string.saved) + " " + out.toString(), Toast.LENGTH_LONG);
+                toast.show();
+            }
+            return out;
+
+        } catch (Exception ex) {
+            Toast toast = Toast.makeText(this, ex.getMessage(), Toast.LENGTH_LONG);
+            toast.show();
+        }
+        return null;
+    }
+
+    void shareTrack() {
+        try {
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            OutputStreamWriter ow = new OutputStreamWriter(out);
+            BufferedWriter writer = new BufferedWriter(ow);
+            if (!save(writer)) {
+                writer.close();
+                return;
+            }
+            writer.close();
+            Intent shareIntent = new Intent();
+            shareIntent.setAction(Intent.ACTION_SEND);
+            shareIntent.putExtra(Intent.EXTRA_TEXT, out.toString());
+            LocalDateTime d = new LocalDateTime(tracks.get(0).points.get(0).time);
+            shareIntent.putExtra(Intent.EXTRA_SUBJECT, d.toString("dd MMMM yyyy"));
+            shareIntent.setType("text/plain");
+            startActivity(Intent.createChooser(shareIntent, getResources().getText(R.string.share)));
+        } catch (Exception ex) {
+            // ignore
+        }
+    }
+
+    boolean save(BufferedWriter writer) {
+        if (!loaded)
+            return false;
+        if (tracks.size() == 0)
+            return false;
+        try {
+            for (Tracks.Track track : tracks) {
+                Date begin = new Date(track.points.get(0).time);
+                Date end = new Date(track.points.get(track.points.size() - 1).time);
+                writer.append(formatTime(begin));
+                writer.append("-");
+                writer.append(formatTime(end));
+                writer.append("   ");
+                writer.append(String.format(getString(R.string.mileage), track.mileage / 1000));
+                writer.append("\r\n");
+                writer.append(track.start);
+                writer.append(" - ");
+                writer.append(track.finish);
+                writer.append("\r\n");
+                writer.append(String.format(getString(R.string.short_status),
+                        timeFormat((int) (track.getTime() / 60)),
+                        track.mileage * 3.6 / track.getTime()));
+                writer.append("\r\n");
+            }
+            return true;
+        } catch (Exception ex) {
+            // ignore
+        }
+        return false;
     }
 
     abstract class TrackPositionFetcher extends AddressRequest {
@@ -381,9 +561,14 @@ public class TracksActivity extends ActionBarActivity {
             }
             TextView tvTitle = (TextView) v.findViewById(R.id.title);
             Tracks.Track track = (Tracks.Track) getItem(position);
-            Date begin = new Date(track.points.get(0).time);
-            Date end = new Date(track.points.get(track.points.size() - 1).time);
-            tvTitle.setText(formatTime(begin) + "-" + formatTime(end));
+            if (track.points.get(0).time != 0) {
+                Date begin = new Date(track.points.get(0).time);
+                Date end = new Date(track.points.get(track.points.size() - 1).time);
+                tvTitle.setText(formatTime(begin) + "-" + formatTime(end));
+            } else {
+                tvTitle.setText("");
+            }
+
             TextView tvMileage = (TextView) v.findViewById(R.id.mileage);
             String s = String.format(getString(R.string.mileage), track.mileage / 1000);
             tvMileage.setText(s);
@@ -405,170 +590,6 @@ public class TracksActivity extends ActionBarActivity {
             tvStatus.setText(text);
             return v;
         }
-    }
-
-    void showTrack(int index) {
-        Intent intent = new Intent(this, TrackView.class);
-        Tracks.Track track = tracks.get(index);
-        Vector<Tracks.Track> track_one = new Vector<Tracks.Track>();
-        track_one.add(track);
-        setTrack(track_one, intent);
-        Date begin = new Date(track.points.get(0).time);
-        Date end = new Date(track.points.get(track.points.size() - 1).time);
-        intent.putExtra(Names.TITLE, format(begin, "d MMMM HH:mm") + "-" + format(end, "HH:mm"));
-        startActivity(intent);
-    }
-
-    void showDay() {
-        Intent intent = new Intent(this, TrackView.class);
-        if (!setTrack(tracks, intent))
-            finish();
-        intent.putExtra(Names.TITLE, getTitle());
-        startActivity(intent);
-    }
-
-    boolean setTrack(Vector<Tracks.Track> tracks, Intent intent) {
-        byte[] data = null;
-        try {
-            ByteArrayOutputStream bos = new ByteArrayOutputStream();
-            ObjectOutput out = new ObjectOutputStream(bos);
-            out.writeObject(tracks);
-            data = bos.toByteArray();
-            out.close();
-            bos.close();
-        } catch (Exception ex) {
-            // ignore
-        }
-        if (data.length > 500000) {
-            try {
-                File outputDir = getCacheDir();
-                File file = File.createTempFile("track", "dat", outputDir);
-                FileOutputStream f = new FileOutputStream(file);
-                f.write(data);
-                intent.putExtra(Names.TRACK_FILE, file.getAbsolutePath());
-                f.close();
-            } catch (Exception ex) {
-                ex.printStackTrace();
-                return false;
-            }
-        } else {
-            intent.putExtra(Names.TRACK, data);
-        }
-        return true;
-    }
-
-
-    String format(Date d, String format) {
-        return new SimpleDateFormat(format).format(d);
-    }
-
-    static String formatTime(Date d) {
-        return String.format("%02d:%02d", d.getHours(), d.getMinutes());
-    }
-
-    String timeFormat(int minutes) {
-        if (minutes < 60) {
-            String s = getString(R.string.m_format);
-            return String.format(s, minutes);
-        }
-        int hours = minutes / 60;
-        minutes -= hours * 60;
-        String s = getString(R.string.hm_format);
-        return String.format(s, hours, minutes);
-    }
-
-    File saveTrack(boolean show_toast) {
-        if (!loaded)
-            return null;
-        if (tracks.size() == 0)
-            return null;
-        try {
-            File path = Environment.getExternalStorageDirectory();
-            if (path == null)
-                path = getFilesDir();
-            path = new File(path, "Tracks");
-            path.mkdirs();
-
-            LocalDateTime d = new LocalDateTime(tracks.get(0).points.get(0).time);
-            String name = d.toString("dd MMMM yyyy") + ".txt";
-            File out = new File(path, name);
-            out.createNewFile();
-
-            FileOutputStream f = new FileOutputStream(out);
-            OutputStreamWriter ow = new OutputStreamWriter(f);
-            BufferedWriter writer = new BufferedWriter(ow);
-
-            if (!save(writer)) {
-                writer.close();
-                return null;
-            }
-
-
-            writer.close();
-            if (show_toast) {
-                Toast toast = Toast.makeText(this, getString(R.string.saved) + " " + out.toString(), Toast.LENGTH_LONG);
-                toast.show();
-            }
-            return out;
-
-        } catch (Exception ex) {
-            Toast toast = Toast.makeText(this, ex.getMessage(), Toast.LENGTH_LONG);
-            toast.show();
-        }
-        return null;
-    }
-
-    void shareTrack() {
-        try {
-            ByteArrayOutputStream out = new ByteArrayOutputStream();
-            OutputStreamWriter ow = new OutputStreamWriter(out);
-            BufferedWriter writer = new BufferedWriter(ow);
-            if (!save(writer)) {
-                writer.close();
-                return;
-            }
-            writer.close();
-            Intent shareIntent = new Intent();
-            shareIntent.setAction(Intent.ACTION_SEND);
-            shareIntent.putExtra(Intent.EXTRA_TEXT, out.toString());
-            LocalDateTime d = new LocalDateTime(tracks.get(0).points.get(0).time);
-            shareIntent.putExtra(Intent.EXTRA_SUBJECT, d.toString("dd MMMM yyyy"));
-            shareIntent.setType("text/plain");
-            startActivity(Intent.createChooser(shareIntent, getResources().getText(R.string.share)));
-        } catch (Exception ex) {
-            // ignore
-        }
-    }
-
-    boolean save(BufferedWriter writer) {
-        if (!loaded)
-            return false;
-        if (tracks.size() == 0)
-            return false;
-        try {
-            for (Tracks.Track track : tracks) {
-                Date begin = new Date(track.points.get(0).time);
-                Date end = new Date(track.points.get(track.points.size() - 1).time);
-                writer.append(formatTime(begin));
-                writer.append("-");
-                writer.append(formatTime(end));
-                writer.append("   ");
-                writer.append(String.format(getString(R.string.mileage), track.mileage / 1000));
-                writer.append("\r\n");
-                writer.append(track.start);
-                writer.append(" - ");
-                writer.append(track.finish);
-                writer.append("\r\n");
-                writer.append(String.format(getString(R.string.short_status),
-                        timeFormat((int) (track.getTime() / 60)),
-                        track.mileage * 3.6 / track.getTime()));
-                writer.append("\r\n");
-            }
-            return true;
-        } catch (Exception ex) {
-            // ignore
-        }
-        return false;
     }
 
 }

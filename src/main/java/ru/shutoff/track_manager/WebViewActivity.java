@@ -19,23 +19,20 @@ import android.widget.FrameLayout;
 public class WebViewActivity extends ActionBarActivity {
 
     String url;
-
-    static class MyWebView extends WebView {
-
-        public MyWebView(Context context) {
-            super(context);
-        }
-
-        Bitmap getScreenshot() {
-            Bitmap.Config conf = Bitmap.Config.ARGB_8888; // see other conf types
-            Bitmap bmp = Bitmap.createBitmap(getWidth(), getHeight(), conf); // this creates a MUTABLE bitmap
-            Canvas canvas = new Canvas(bmp);
-            onDraw(canvas);
-            return bmp;
-        }
-    }
+    FrameLayout holder;
 
     ;
+    MyWebView webView;
+
+    public static Intent newEmailIntent(String address, String subject, String body, String cc) {
+        Intent intent = new Intent(Intent.ACTION_SEND);
+        intent.putExtra(Intent.EXTRA_EMAIL, new String[]{address});
+        intent.putExtra(Intent.EXTRA_TEXT, body);
+        intent.putExtra(Intent.EXTRA_SUBJECT, subject);
+        intent.putExtra(Intent.EXTRA_CC, cc);
+        intent.setType("message/rfc822");
+        return intent;
+    }
 
     String loadURL() {
         WebViewClient mWebClient = new WebViewClient() {
@@ -56,9 +53,6 @@ public class WebViewActivity extends ActionBarActivity {
         return url;
     }
 
-    FrameLayout holder;
-    MyWebView webView;
-
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -78,6 +72,8 @@ public class WebViewActivity extends ActionBarActivity {
 
             WebSettings settings = webView.getSettings();
             settings.setJavaScriptEnabled(true);
+            settings.setAppCacheEnabled(true);
+            settings.setAppCachePath(getApplicationContext().getCacheDir().getAbsolutePath());
 
             WebChromeClient mChromeClient = new WebChromeClient() {
                 @Override
@@ -108,14 +104,19 @@ public class WebViewActivity extends ActionBarActivity {
         return webView;
     }
 
-    public static Intent newEmailIntent(String address, String subject, String body, String cc) {
-        Intent intent = new Intent(Intent.ACTION_SEND);
-        intent.putExtra(Intent.EXTRA_EMAIL, new String[]{address});
-        intent.putExtra(Intent.EXTRA_TEXT, body);
-        intent.putExtra(Intent.EXTRA_SUBJECT, subject);
-        intent.putExtra(Intent.EXTRA_CC, cc);
-        intent.setType("message/rfc822");
-        return intent;
+    static class MyWebView extends WebView {
+
+        public MyWebView(Context context) {
+            super(context);
+        }
+
+        Bitmap getScreenshot() {
+            Bitmap.Config conf = Bitmap.Config.ARGB_8888; // see other conf types
+            Bitmap bmp = Bitmap.createBitmap(getWidth(), getHeight(), conf); // this creates a MUTABLE bitmap
+            Canvas canvas = new Canvas(bmp);
+            onDraw(canvas);
+            return bmp;
+        }
     }
 }
 

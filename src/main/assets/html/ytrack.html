@@ -2,25 +2,37 @@
 <html>
 <head>
 <title></title>
-<meta charset="utf-8">
 <meta name="viewport" content="initial-scale=1.0, user-scalable=no">
-<link rel="stylesheet" href="http://cdn.leafletjs.com/leaflet-0.6.4/leaflet.css"/>
-<script src="http://cdn.leafletjs.com/leaflet-0.6.4/leaflet.js"></script>
-<script src="../../../../../android.js"></script>
+<meta charset="utf-8">
 <style>
     html, body, #map-canvas {
     margin: 0;
     padding: 0;
     height: 100%;
     }
+    #panel {
+    position: absolute;
+    top: 5px;
+    left: 50%;
+    margin-left: -180px;
+    z-index: 5;
+    background-color: #fff;
+    padding: 5px;
+    border: 1px solid #999;
+    }
+    img[src*="gstatic.com/"], img[src*="googleapis.com/"] {
+    max-width: none;
+    }
 </style>
+<script src="http://api-maps.yandex.ru/2.0-stable/?load=package.standard,package.geoObjects&lang=ru-RU"
+        type="text/javascript"></script>
 <script>
 
 var map;
 var parts;
 var points;
+var tracks;
 var click_info;
-var click_pos;
 
 var colors =
 [
@@ -99,80 +111,57 @@ function initialize() {
     min_lon -= d_lon;
     max_lon += d_lon;
 
-    var lat = (min_lat + max_lat) / 2;
-    var lon = (min_lon + max_lon) / 2;
-
-    map = L.map('map', {
-        center: [lat, lon],
-        zoom: 19
+    map = new ymaps.Map ("map-canvas", {
+        bounds: [ [min_lat, min_lon], [max_lat, max_lon]]
     });
-
-	var zoom = map.getBoundsZoom([[min_lat, min_lon], [max_lat, max_lon]]);
-	map.setZoom(zoom);
-
-    var s9 = function(s){
-        return (s + '').substring(0, 9);
-    }
-
-    map.on('click', function(e){
-        console.log('click', e, e.latlng);
-        if (click_info == null)
-            click_info = L.popup();
-        click_pos = e.latlng;
-        click_info
-            .setLatLng(click_pos)
-            .setContent(s9(click_pos.lat) + ',' + s9(click_pos.lng))
-            .addTo(map);
-    })
-
-    L.tileLayer('http://otile1.mqcdn.com/tiles/1.0.0/osm/{z}/{x}/{y}.png', {
-	    maxZoom: 19
-	}).addTo(map);
+    map.controls.add('smallZoomControl');
 
     for (var i in markers){
         (function(i){
             var p = markers[i];
             var lat = parseFloat(p[0]);
             var lon = parseFloat(p[1]);
-            var mark = L.marker([lat, lon]).addTo(map);
-            mark.on('click', function(){
-                L.popup()
-                    .setLatLng([lat, lon])
-                    .setContent(p[2])
-                    .openOn(map)
+            var mark = new ymaps.Placemark([ lat, lon], {
+                balloonContent: p[2]
             });
+            map.geoObjects.add(mark);
         })(i);
     }
-    showTrack();
 
+    s9 = function(s){
+        return (s + '').substring(0, 9);
+    }
+
+    map.events.add('click', function (e) {
+        var coord = e.get('coordPosition');
+        map.balloon.open(coord, s9(coord[0]) + ',' + s9(coord[1]));
+    });
+
+    showTrack();
+ 
 }
 
 var point_info = null;
-var tracks;
 
 function showTrack() {
-    if (tracks){
-        for (var i in tracks){
-            map.removeLayer(tracks[i]);
-        }
-    }
     tracks = [];
+
     var traffic = android.traffic();
     for (var i in points){
         var p = points[i];
-        var line = L.polyline(p.points,
-            {
-                color: traffic ? colors[p.index][1] : '#000080',
-                weight: 5,
-                opacity: 1
-            })
-            .addTo(map);
-        tracks.push(line);
-        line.on('click', showPointInfo);
+        var track = new ymaps.Polyline(p.points, {}, {
+            strokeColor: traffic ? colors[p.index][1] : '#000080',
+            strokeOpacity: 1.0,
+            strokeWidth: 5
+        });
+        map.geoObjects.add(track);
+        tracks.push(track);
+        track.events.add('click', showPointInfo);
     }
 }
 
-function showPointInfo(event) {
+function showPointInfo(e) {
+    var coord = e.get('coordPosition');
     var delta = 1000;
     var best_index = null;
     for (var i in parts){
@@ -181,7 +170,7 @@ function showPointInfo(event) {
             continue;
         var lat = parseFloat(p[0]);
         var lon = parseFloat(p[1]);
-        var d = Math.abs(lat - event.latlng.lat) + Math.abs(lon - event.latlng.lng);
+        var d = Math.abs(lat - coord[0]) + Math.abs(lon - coord[1]);
         if (d < delta){
             best_index = i;
             delta = d;
@@ -193,46 +182,43 @@ function showPointInfo(event) {
     var d = new Date(parseInt(p[3]));
     var lat = parseFloat(p[0]);
     var lon = parseFloat(p[1]);
-    if (point_info == null)
-        point_info = L.popup();
-    point_info
-        .setLatLng([lat, lon])
-        .setContent(d.toLocaleTimeString() + '<br/>' + p[2] + ' ' + android.kmh())
-        .addTo(map);
+    map.balloon.open([lat, lon], d.toLocaleTimeString() + '<br/>' + p[2] + ' км/ч');
 }
 
 function saveTrack() {
     var bounds = map.getBounds();
     var ne = bounds.getNorthEast();
     var sw = bounds.getSouthWest();
-    android.save(sw.lat, ne.lat, sw.lng, ne.lng);
+    android.save(sw.lat(), ne.lat(), sw.lng(), ne.lng());
 }
 
 function shareTrack() {
     var bounds = map.getBounds();
     var ne = bounds.getNorthEast();
     var sw = bounds.getSouthWest();
-    android.share(sw.lat, ne.lat, sw.lng, ne.lng);
+    android.share(sw.lat(), ne.lat(), sw.lng(), ne.lng());
 }
 
 function screenshot() {
     var bounds = map.getBounds();
     var ne = bounds.getNorthEast();
     var sw = bounds.getSouthWest();
-    var lat = (sw.lat + ne.lat) / 2;
-    var lng = (sw.lng + ne.lng) / 2;
-    if (click_pos){
-        lat = click_pos.lat;
-        lng = click_pos.lng;
+    var lat = (sw.lat() + ne.lat()) / 2;
+    var lng = (sw.lng() + ne.lng()) / 2;
+    if (click_info){
+        var pos = click_info.getPosition();
+        lat = pos.lat();
+        lng = pos.lng();
     }
-    android.screenshot(sw.lat, ne.lat, sw.lng, ne.lng, lat, lng);
+    android.screenshot(sw.lat(), ne.lat(), sw.lng(), ne.lng(), lat, lng);
 }
 
+ymaps.ready(initialize);
 
 
 </script>
 </head>
-<body onload="initialize()">
-<div id="map" style="height: 100%"></div>
+<body>
+<div id="map-canvas"></div>
 </body>
 </html>

@@ -4,18 +4,18 @@
     xmlns:car="http://schemas.android.com/apk/res-auto">
     <item
         android:id="@+id/save"
-        android:title="@string/save"
         android:icon="@android:drawable/ic_menu_save"
+        android:title="@string/save"
         car:showAsAction="ifRoom" />
     <item
         android:id="@+id/share"
-        android:title="@string/share"
         android:icon="@android:drawable/ic_menu_share"
+        android:title="@string/share"
         car:showAsAction="ifRoom" />
     <item
         android:id="@+id/shot"
-        android:title="@string/shot"
         android:icon="@android:drawable/ic_menu_camera"
+        android:title="@string/shot"
         car:showAsAction="ifRoom" />
     <item
         android:id="@+id/google"
@@ -24,6 +24,10 @@
     <item
         android:id="@+id/osm"
         android:title="@string/osm"
+        car:showAsAction="never" />
+    <item
+        android:id="@+id/yandex"
+        android:title="@string/yandex"
         car:showAsAction="never" />
     <item
         android:id="@+id/traffic"

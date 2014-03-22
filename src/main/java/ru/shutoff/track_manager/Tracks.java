@@ -16,27 +16,9 @@ import java.util.regex.Pattern;
 public class Tracks {
 
     static final String TRACK_FOLDER = "CityGuide/Tracks";
-
-    static class Point implements Serializable {
-        double lat;
-        double lng;
-        double speed;
-        double altitude;
-        long time;
-    }
-
-    static class Track implements Serializable {
-        Vector<Point> points;
-        String start;
-        String finish;
-        double mileage;
-
-        long getTime() {
-            if (points.size() <= 1)
-                return 0;
-            return (points.get(points.size() - 1).time - points.get(0).time) / 1000;
-        }
-    }
+    static final double D2R = 0.017453; // Константа для преобразования градусов в радианы
+    static final double a = 6378137.0; // Основные полуоси
+    static final double e2 = 0.006739496742337; // Квадрат эксцентричности эллипсоида
 
     static Vector<Track> loadGpx(File file) {
         try {
@@ -47,8 +29,11 @@ public class Tracks {
             Vector<Point> points = null;
             Point point = null;
             boolean is_time = false;
+            boolean is_speed = false;
+            boolean has_speed = false;
             String time = "";
-            Pattern time_pattern = Pattern.compile("(\\d\\d\\d\\d)-(\\d\\d?)-(\\d\\d?)T(\\d\\d?):(\\d\\d):(\\d\\d)Z");
+            String speed = "";
+            Pattern time_pattern = Pattern.compile("(\\d\\d\\d\\d)-(\\d\\d?)-(\\d\\d?)T(\\d\\d?):(\\d\\d):(\\d\\d)(\\.\\d\\d\\d)?Z");
             while (xpp.getEventType() != XmlPullParser.END_DOCUMENT) {
                 switch (xpp.getEventType()) {
                     case XmlPullParser.START_TAG:
@@ -65,10 +50,16 @@ public class Tracks {
                             is_time = true;
                             time = "";
                         }
+                        if (xpp.getName().equals("speed")) {
+                            is_speed = true;
+                            speed = "";
+                        }
                         break;
                     case XmlPullParser.TEXT:
                         if (is_time)
                             time += xpp.getText();
+                        if (is_speed)
+                            speed += xpp.getText();
                         break;
                     case XmlPullParser.END_TAG:
                         if (xpp.getName().equals("time")) {
@@ -82,14 +73,26 @@ public class Tracks {
                                 int min = Integer.parseInt(m.group(5));
                                 int sec = Integer.parseInt(m.group(6));
                                 Date dd = new Date(year - 1900, month - 1, day, hour, min, sec);
-                                if (point != null) {
+                                if (point != null)
                                     point.time = dd.getTime();
-                                    if (points == null)
-                                        points = new Vector<Point>();
-                                    points.add(point);
-                                }
                             }
-                            point = null;
+                        }
+                        if (xpp.getName().equals("speed")) {
+                            is_speed = false;
+                            try {
+                                if (point != null)
+                                    point.speed = Double.parseDouble(speed) * 3.6;
+                                has_speed = true;
+                            } catch (Exception ex) {
+                                // ignore
+                            }
+                        }
+                        if (xpp.getName().equals("trkpt")) {
+                            if (point != null) {
+                                if (points == null)
+                                    points = new Vector<Point>();
+                                points.add(point);
+                            }
                         }
                         if (xpp.getName().equals("trkseg") || xpp.getName().equals("trk")) {
                             if (points != null) {
@@ -103,9 +106,10 @@ public class Tracks {
                                     for (Point pp : points) {
                                         if (p != null) {
                                             double distance = calc_distance(p.lat, p.lng, pp.lat, pp.lng);
-                                            double speed = (distance * 3600) / (pp.time - p.time);
                                             track.mileage += distance;
-                                            p.speed = filter.correct(speed);
+                                            long dt = pp.time - p.time;
+                                            if ((dt > 0) && !has_speed)
+                                                p.speed = Math.round(filter.correct((distance * 3600) / dt));
                                         }
                                         p = pp;
                                     }
@@ -128,9 +132,10 @@ public class Tracks {
         return null;
     }
 
-    static Vector<Track> loadPlt(File file) {
+    static Vector<Track> loadPlt(File file, boolean ignore) {
+        BufferedReader reader = null;
         try {
-            BufferedReader reader = new BufferedReader(new FileReader(file));
+            reader = new BufferedReader(new FileReader(file));
             String line = reader.readLine();
             if (!line.equals("OziExplorer Track Point File Version 2.1"))
                 return null;
@@ -147,6 +152,7 @@ public class Tracks {
             long prev_time = 0;
             long zone_delta = 0;
             Vector<Point> points = new Vector<Point>();
+            boolean all_failed = true;
             for (; ; ) {
                 line = reader.readLine();
                 if (line == null)
@@ -182,7 +188,14 @@ public class Tracks {
                         }
                     }
 
-                    if ((prev_alt != -777) && (alt != -777)) {
+                    if (ignore) {
+                        Point p = new Point();
+                        p.lat = prev_lat;
+                        p.lng = prev_lng;
+                        p.time = prev_time;
+                        p.altitude = prev_alt;
+                        points.add(p);
+                    } else if ((prev_alt != -777) && (alt != -777)) {
                         double da = Math.abs(alt - prev_alt);
                         if (da < 15) {
                             Point p = new Point();
@@ -207,6 +220,7 @@ public class Tracks {
                 p.lng = prev_lng;
                 p.time = prev_time;
                 points.add(p);
+                all_failed = false;
             }
             int start = 0;
             if (points.size() > 0) {
@@ -253,20 +267,29 @@ public class Tracks {
                 Kalman1D filter = new Kalman1D(2, 30, 1, 1);
                 filter.setState(track.points.get(0).speed, 0.1);
                 for (Point p : track.points) {
-                    p.speed = filter.correct(p.speed);
+                    p.speed = Math.round(filter.correct(p.speed));
                 }
             }
             if (res.size() > 0)
                 return res;
+            if (!ignore && all_failed) {
+                reader.close();
+                reader = null;
+                return loadPlt(file, true);
+            }
         } catch (Exception ex) {
             ex.printStackTrace();
+        } finally {
+            if (reader != null) {
+                try {
+                    reader.close();
+                } catch (Exception ex) {
+                    // ignore
+                }
+            }
         }
         return null;
     }
-
-    static final double D2R = 0.017453; // Константа для преобразования градусов в радианы
-    static final double a = 6378137.0; // Основные полуоси
-    static final double e2 = 0.006739496742337; // Квадрат эксцентричности эллипсоида
 
     static double calc_distance(double lat1, double lon1, double lat2, double lon2) {
 
@@ -291,6 +314,27 @@ public class Tracks {
         double fR = (fRho * fNu) / ((fRho * Math.pow(Math.sin(fAlpha), 2)) + (fNu * Math.pow(Math.cos(fAlpha), 2)));
 
         return fz * fR;
+    }
+
+    static class Point implements Serializable {
+        double lat;
+        double lng;
+        double speed;
+        double altitude;
+        long time;
+    }
+
+    static class Track implements Serializable {
+        Vector<Point> points;
+        String start;
+        String finish;
+        double mileage;
+
+        long getTime() {
+            if (points.size() <= 1)
+                return 0;
+            return (points.get(points.size() - 1).time - points.get(0).time) / 1000;
+        }
     }
 
     static class Kalman1D {
